@@ -1,5 +1,6 @@
-import type { FC, ReactNode } from 'react'
+import { useMemo, type FC, type ReactNode } from 'react'
 import { useSimulation } from '../../context/SimulationContext'
+import type { EcgRhythm } from '../../../engine/patient'
 import ECGCanvas from './ECGCanvas'
 import SimpleWaveformCanvas from './SimpleWaveformCanvas'
 
@@ -26,11 +27,27 @@ function formatDateTime(date: Date): string {
   }).replace(',', '')
 }
 
-function bpHistory(sys: number, dia: number): Array<[string, string]> {
-  const now = new Date()
+const RHYTHM_LABELS: Record<EcgRhythm, string> = {
+  sinus: 'Sinus Rhythm',
+  vf: 'Ventricular Fibrillation',
+  vt: 'Ventricular Tachycardia',
+  svt: 'Supraventricular Tachycardia',
+  asystole: 'Asystole',
+}
+
+// Default alarm thresholds (Phase 3 will lift these into MonitorLayout config).
+const ALARM_THRESHOLDS = {
+  hr: { lo: 50, hi: 120 },
+  spo2: { lo: 92, hi: 100 },
+  rr: { lo: 8, hi: 35 },
+  temp: { lo: 35.5, hi: 38.5 },
+  nibp: { sysLo: 90, sysHi: 160 },
+} as const
+
+function buildBpHistory(sys: number, dia: number, anchorMs: number): Array<[string, string]> {
   return Array.from({ length: 6 }, (_, i) => {
     const minutesBack = (5 - i) * 5
-    const time = new Date(now.getTime() - minutesBack * 60_000)
+    const time = new Date(anchorMs - minutesBack * 60_000)
     const drift = 5 - i
     const nextSys = round(sys + drift * 2 - 3)
     const nextDia = round(dia + drift - 2)
@@ -49,22 +66,37 @@ function SoftKey({ children, active = false }: { children: ReactNode; active?: b
 
 const Monitor: FC = () => {
   const { state, scenario, engine } = useSimulation()
-  const now = new Date()
+
   const hr = round(state.hr)
   const spo2 = round(state.spo2)
   const nibpSys = round(state.nibp.sys)
   const nibpDia = round(state.nibp.dia)
-  const nibpMap = round((state.nibp.sys + 2 * state.nibp.dia) / 3)
+  const nibpMap = round(state.nibp.map)
   const rr = round(state.rr)
   const temp = Math.max(0, state.temp).toFixed(1)
   const etco2 = Math.max(0, state.etco2).toFixed(1)
+  const rhythmLabel = RHYTHM_LABELS[state.ecgRhythm]
+
+  // Anchor the fake BP history + clock display to the current minute so the
+  // trace only refreshes when the minute rolls over, not on every ~5 Hz
+  // re-render. TODO(Phase 3): replace with real NBP cycle history from the
+  // engine so we don't need this anchor at all.
+  // eslint-disable-next-line react-hooks/purity
+  const minuteAnchor = Math.floor(Date.now() / 60_000) * 60_000
+
+  const bpHistory = useMemo(
+    () => buildBpHistory(nibpSys, nibpDia, minuteAnchor),
+    [nibpSys, nibpDia, minuteAnchor],
+  )
+
+  const clockNow = new Date(minuteAnchor)
 
   return (
     <div className="intellivue-frame" aria-label="IntelliVue style simulation monitor">
       <div className="intellivue-screen">
         <div className="intellivue-status">
           <span className="intellivue-status__patient">Not Admitted</span>
-          <span>{formatDateTime(now)}</span>
+          <span>{formatDateTime(clockNow)}</span>
           <span>Adult</span>
           <span>Dynamic Wave</span>
         </div>
@@ -83,7 +115,7 @@ const Monitor: FC = () => {
                 color="#65f36f"
                 scale={1}
               />
-              <span className="intellivue-rhythm">Sinus Rhythm</span>
+              <span className="intellivue-rhythm">{rhythmLabel}</span>
             </section>
 
             <section className="intellivue-wave intellivue-wave--pleth">
@@ -123,8 +155,8 @@ const Monitor: FC = () => {
             <div className="numeric numeric--hr">
               <div className="numeric__meta">
                 <span>HR</span>
-                <small>120</small>
-                <small>50</small>
+                <small>{ALARM_THRESHOLDS.hr.hi}</small>
+                <small>{ALARM_THRESHOLDS.hr.lo}</small>
               </div>
               <strong>{hr}</strong>
             </div>
@@ -139,8 +171,8 @@ const Monitor: FC = () => {
             <div className="numeric numeric--spo2">
               <div className="numeric__meta">
                 <span>SpO2</span>
-                <small>100</small>
-                <small>92</small>
+                <small>{ALARM_THRESHOLDS.spo2.hi}</small>
+                <small>{ALARM_THRESHOLDS.spo2.lo}</small>
               </div>
               <strong>{spo2}</strong>
             </div>
@@ -148,16 +180,16 @@ const Monitor: FC = () => {
             <div className="numeric numeric--rr">
               <div className="numeric__meta">
                 <span>RR</span>
-                <small>35</small>
-                <small>8</small>
+                <small>{ALARM_THRESHOLDS.rr.hi}</small>
+                <small>{ALARM_THRESHOLDS.rr.lo}</small>
               </div>
               <strong>{rr}</strong>
             </div>
 
             <div className="numeric numeric--temp">
               <span>Temp</span>
-              <small>{Math.max(0, state.temp + 4.3).toFixed(1)}</small>
-              <small>{temp}</small>
+              <small>{ALARM_THRESHOLDS.temp.hi.toFixed(1)}</small>
+              <small>{ALARM_THRESHOLDS.temp.lo.toFixed(1)}</small>
               <strong>{temp}</strong>
             </div>
           </aside>
@@ -168,8 +200,8 @@ const Monitor: FC = () => {
             <div className="nbp-panel__labels">
               <span>NBP</span>
               <small>Pulse {hr}</small>
-              <small>Sys 160</small>
-              <small>90</small>
+              <small>Sys {ALARM_THRESHOLDS.nibp.sysHi}</small>
+              <small>{ALARM_THRESHOLDS.nibp.sysLo}</small>
             </div>
             <strong>{nibpSys}/{nibpDia}</strong>
             <em>({nibpMap})</em>
@@ -178,11 +210,11 @@ const Monitor: FC = () => {
 
           <section className="nbp-history">
             <div>
-              <span>{formatClock(now)}</span>
+              <span>{formatClock(clockNow)}</span>
               <strong>NBP</strong>
               <small>mmHg</small>
             </div>
-            {bpHistory(state.nibp.sys, state.nibp.dia).map(([time, value]) => (
+            {bpHistory.map(([time, value]) => (
               <p key={`${time}-${value}`}>
                 <span>{time}</span>
                 <span>{value}</span>
@@ -192,7 +224,7 @@ const Monitor: FC = () => {
 
           <section className="monitor-clock">
             <span>{scenario?.label ?? 'Main Screen'}</span>
-            <strong>{formatClock(now)}</strong>
+            <strong>{formatClock(clockNow)}</strong>
           </section>
         </div>
 
