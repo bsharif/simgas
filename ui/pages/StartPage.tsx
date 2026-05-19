@@ -28,11 +28,16 @@ const StartPage: FC<StartPageProps> = ({ onStart }) => {
     <div style={{
       width: '100%',
       height: '100vh',
+      overflowY: 'auto',
+      background: '#f5f5f0',
+    }}>
+    <div style={{
+      minHeight: '100%',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: '#f5f5f0',
+      padding: '32px 16px',
     }}>
       <div style={{
         textAlign: 'center',
@@ -183,6 +188,7 @@ const StartPage: FC<StartPageProps> = ({ onStart }) => {
       }}>
         SimGas is an educational simulation tool. Not for clinical use.
       </div>
+    </div>
     </div>
   )
 }
