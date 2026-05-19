@@ -1,5 +1,7 @@
 # SimGas
 
+[![CI](https://github.com/bsharif/simgas/actions/workflows/ci.yml/badge.svg)](https://github.com/bsharif/simgas/actions/workflows/ci.yml)
+
 SimGas is a browser-based anaesthetic simulation monitor for practising
 peri-operative emergencies. It combines a Philips IntelliVue-inspired patient
 monitor, a simulation physiology engine, drug and airway interventions, and an
@@ -166,13 +168,45 @@ When you add new simulation features:
 - Add controls in `ui/components/RightPanel/RightPanel.tsx` when users need to
   interact with the setting.
 
+## Project workflow
+
+Branching conventions:
+
+- `fix/*` — bug fixes
+- `feat/*` — new features
+- `chore/*` — tooling, CI, dependencies, dead-code removal
+- `refactor/*` — internal restructuring without behaviour change
+- `docs/*` — documentation only
+
+Each branch opens one PR. PRs are squash-merged into `main` after CI passes. Phase
+boundaries are tagged `v0.X.0` (`git tag -a v0.X.0 -m "..."`).
+
+CI (`.github/workflows/ci.yml`) runs `npm run lint`, `npm run test`, and
+`npm run build` on every PR and on every push to `main`.
+
+A pre-commit hook (via `simple-git-hooks`) runs `npm run lint` and
+`npm run typecheck` locally before each commit. The hook is installed
+automatically after `npm install` (via the `prepare` script). To bypass in an
+emergency: `SKIP_SIMPLE_GIT_HOOKS=1 git commit ...`.
+
 ## License and attribution
 
 The syringe labelling reference PDF is included for local design reference. The
 app uses synthetic data and does not contain patient-identifiable information.
 
-## Next steps
+## Roadmap
 
-Useful next improvements include adding persistence for scenario results,
-expanding the scenario library, adding UI tests for monitor interactions, and
-linking machine settings more deeply into the physiology model.
+The full plan for the next iteration is tracked in
+[`docs/superpowers/plans/`](docs/superpowers/plans/). In summary:
+
+- **v0.2.0 — Engine + UI bug fixes:** pause respect, persistent rAF, drift-baseline
+  scenarios so drug effects actually persist, tube-position state for the
+  oesophageal-intubation scenario, hint timing, first-class scenario phase.
+- **v0.3.0 — Scenario DSL:** YAML frontmatter + markdown body, predicate
+  mini-language, interpreter, lint CLI. Authors no longer need TypeScript.
+- **v0.4.0 — Configurable monitor + extras:** runtime-toggleable traces (ECG,
+  pleth, capnography, Art line, CVP, BIS), dose tracking with cooldown, Web
+  Audio alarms with priority escalation, post-scenario debrief view.
+- **v0.5.0 — Realtime multi-user:** Supabase Realtime rooms with instructor /
+  learner / observer roles, leader-server hybrid model, deterministic local
+  waveform regeneration (no waveform-buffer broadcasting).
