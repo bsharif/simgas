@@ -23,6 +23,7 @@ interface SimulationContextValue {
   scenario: Scenario | null
   scenarios: Scenario[]
   phase: SimulationPhase
+  elapsedSeconds: number
   /** @deprecated read `phase === 'resolved'` instead */
   resolved: boolean
   /** @deprecated read `phase === 'failed'` instead */
@@ -39,6 +40,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const [scenario, setScenario] = useState<Scenario | null>(null)
   const [paused, setPaused] = useState(false)
   const [phase, setPhase] = useState<SimulationPhase>(engine.phase)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
   useEffect(() => {
     // Engine broadcasts state at ~60 Hz, but numerics on a real monitor refresh
@@ -52,6 +54,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       if (now - lastFlushTs >= FLUSH_INTERVAL_MS) {
         lastFlushTs = now
         setState({ ...s })
+        setElapsedSeconds(engine.elapsedSeconds)
       }
     })
 
@@ -82,6 +85,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setScenario(s)
     setEventLog([])
     setPaused(false)
+    setElapsedSeconds(0)
     engine.start(s)
   }, [engine])
 
@@ -121,6 +125,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         scenario,
         scenarios: ALL_SCENARIOS,
         phase,
+        elapsedSeconds,
         resolved: phase === 'resolved',
         failed: phase === 'failed',
       }}
