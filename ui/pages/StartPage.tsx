@@ -128,6 +128,44 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
             </button>
           )
         })}
+
+        <button
+          key="__create"
+          onClick={onOpenCreator}
+          style={{
+            width: 230,
+            padding: 20,
+            borderRadius: 10,
+            border: '1px dashed #ccc',
+            background: '#fafafa',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            transition: 'border-color 0.2s, background 0.2s',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = '#ffffff'
+            e.currentTarget.style.borderColor = '#1a5276'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = '#fafafa'
+            e.currentTarget.style.borderColor = '#ccc'
+          }}
+        >
+          <div style={{ fontSize: 28, lineHeight: 1 }}>?</div>
+          <div style={{
+            color: '#999',
+            fontSize: 14,
+            fontWeight: 600,
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+          }}>
+            + Create Scenario
+          </div>
+        </button>
       </div>
 
       <div style={{
@@ -190,26 +228,6 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
         SimGas is an educational simulation tool. Not for clinical use.
       </div>
 
-      <button
-        onClick={onOpenCreator}
-        style={{
-          marginTop: 12,
-          padding: '8px 20px',
-          borderRadius: 6,
-          border: '1px solid #e0ddd5',
-          background: 'transparent',
-          color: '#bbb',
-          fontSize: 12,
-          cursor: 'pointer',
-          letterSpacing: 2,
-          textTransform: 'uppercase',
-          transition: 'color 0.2s',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.color = '#1a5276' }}
-        onMouseLeave={e => { e.currentTarget.style.color = '#bbb' }}
-      >
-        + Create Scenario
-      </button>
     </div>
     </div>
   )
