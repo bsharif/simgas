@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { detectAlarms, type AlarmPriority } from '../../engine/alarms'
 import type { PatientState } from '../../engine/patient'
 import type { MonitorNumeric, NumericId } from '../../engine/monitor/layout'
@@ -24,7 +24,10 @@ interface UseAlarmsResult {
   toggleMute: () => void
   /** Seconds remaining on the auto-resilence timer, or null. */
   muteRemainingSec: number | null
+  acknowledgeAlarm: () => void
 }
+
+const ALARM_RANK: Record<AlarmPriority, number> = { none: 0, cyan: 1, yellow: 2, red: 3 }
 
 const MUTE_DURATION_MS = 120_000
 
@@ -65,6 +68,39 @@ export function useAlarms(
     () => { void nowPerfMs; return detectAlarms(state, numerics) },
     [state, numerics, nowPerfMs],
   )
+
+  // Acknowledged breaches are suppressed until the value returns to normal.
+  const [acknowledgedIds, setAcknowledgedIds] = useState<ReadonlySet<NumericId>>(
+    () => new Set<NumericId>()
+  )
+
+  // Clear acknowledged ids that are no longer breaching (so they can re-alarm).
+  useEffect(() => {
+    if (acknowledgedIds.size === 0) return
+    const next = new Set([...acknowledgedIds].filter(id => detection.byNumeric.has(id)))
+    if (next.size !== acknowledgedIds.size)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAcknowledgedIds(next)
+  }, [detection.byNumeric, acknowledgedIds])
+
+  const effectiveByNumeric = useMemo((): ReadonlyMap<NumericId, AlarmPriority> => {
+    if (acknowledgedIds.size === 0) return detection.byNumeric
+    const m = new Map(detection.byNumeric)
+    for (const id of acknowledgedIds) m.delete(id)
+    return m
+  }, [detection.byNumeric, acknowledgedIds])
+
+  const effectivePriority = useMemo((): AlarmPriority => {
+    let highest: AlarmPriority = 'none'
+    for (const p of effectiveByNumeric.values()) {
+      if (ALARM_RANK[p] > ALARM_RANK[highest]) highest = p
+    }
+    return highest
+  }, [effectiveByNumeric])
+
+  const acknowledgeAlarm = useCallback(() => {
+    setAcknowledgedIds(new Set(detection.byNumeric.keys()))
+  }, [detection.byNumeric])
 
   // Mute lifetime is anchored to performance.now() (monotonic, lint-allowed
   // in render) rather than Date.now() so we can compute muteRemainingSec
@@ -110,7 +146,7 @@ export function useAlarms(
 
   // Schedule beeps.
   useEffect(() => {
-    const { priority } = detection
+    const priority = effectivePriority
     if (priority === 'none') {
       lastBurstAtRef.current = 0
       lastPriorityRef.current = 'none'
@@ -148,7 +184,7 @@ export function useAlarms(
       osc.stop(t + pattern.beepSec + 0.02)
       t += pattern.beepSec + pattern.gapSec
     }
-  }, [detection, isMuted])
+  }, [effectivePriority, isMuted])
 
   const toggleMute = () => {
     if (isMuted) {
@@ -167,10 +203,11 @@ export function useAlarms(
     : null
 
   return {
-    priority: detection.priority,
-    byNumeric: detection.byNumeric,
+    priority: effectivePriority,
+    byNumeric: effectiveByNumeric,
     isMuted,
     toggleMute,
     muteRemainingSec,
+    acknowledgeAlarm,
   }
 }
