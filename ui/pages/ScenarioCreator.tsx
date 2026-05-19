@@ -798,25 +798,6 @@ const ScenarioCreator: FC<ScenarioCreatorProps> = ({ onBack }) => {
           <div style={{ flex: 1, fontSize: 20, fontWeight: 700, color: '#1a5276', letterSpacing: 3, textTransform: 'uppercase' }}>
             Scenario Creator
           </div>
-          <button
-            onClick={() => {
-              const spec = creatorStateToSpec(state)
-              const md = assembleMarkdown(spec, state.debriefBody)
-              const blob = new Blob([md], { type: 'text/markdown' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url; a.download = `${spec.id || 'scenario'}.md`; a.click()
-              URL.revokeObjectURL(url)
-            }}
-            style={{
-              padding: '10px 20px', borderRadius: 6, border: '2px solid #1a5276',
-              background: 'rgba(26,82,118,0.05)', color: '#1a5276',
-              fontWeight: 700, fontSize: 14, cursor: 'pointer', letterSpacing: 1,
-              textTransform: 'uppercase',
-            }}
-          >
-            Download .md
-          </button>
         </div>
 
         {error && (
@@ -896,6 +877,28 @@ const ScenarioCreator: FC<ScenarioCreatorProps> = ({ onBack }) => {
               onMouseLeave={e => { e.currentTarget.style.borderColor = '#d0cdc5'; e.currentTarget.style.color = '#666' }}
             >
               Load Example Scenario
+            </button>
+
+            <button
+              onClick={() => {
+                const spec = creatorStateToSpec(state)
+                const md = assembleMarkdown(spec, state.debriefBody)
+                const blob = new Blob([md], { type: 'text/markdown' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url; a.download = `${spec.id || 'scenario'}.md`; a.click()
+                URL.revokeObjectURL(url)
+              }}
+              style={{
+                padding: '8px 18px', borderRadius: 6, border: '1px solid #d0cdc5',
+                background: 'transparent', color: '#666',
+                fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                transition: 'border-color 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#1a5276'; e.currentTarget.style.color = '#1a5276' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#d0cdc5'; e.currentTarget.style.color = '#666' }}
+            >
+              Download .md
             </button>
 
             <button
