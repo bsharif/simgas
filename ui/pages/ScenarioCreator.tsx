@@ -830,77 +830,102 @@ const ScenarioCreator: FC<ScenarioCreatorProps> = ({ onBack }) => {
         )}
 
         {/* ── Action bar ────────────────────────────────────────────────── */}
-        <div style={{ marginTop: 12, marginBottom: 24, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".md,text/markdown"
-            style={{ display: 'none' }}
-            onChange={e => {
-              const file = e.target.files?.[0]
-              if (!file) return
-              const reader = new FileReader()
-              reader.onload = evt => {
-                const raw = evt.target?.result as string
+        <div style={{
+          marginTop: 12, marginBottom: 28, padding: '16px 20px',
+          borderRadius: 8, background: '#ffffff', border: '1px solid #e0ddd5',
+        }}>
+          <div style={{ marginBottom: 12, fontSize: 11, fontWeight: 800, letterSpacing: 3, color: '#888', textTransform: 'uppercase' }}>
+            Actions
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".md,text/markdown"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = evt => {
+                  const raw = evt.target?.result as string
+                  try {
+                    const { spec, body } = parseScenarioFile(raw, file.name)
+                    setState(specToCreatorState(spec, body))
+                    setError(null)
+                  } catch (err) {
+                    setError((err as Error).message)
+                  }
+                }
+                reader.readAsText(file)
+                e.target.value = ''
+              }}
+            />
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                padding: '8px 18px', borderRadius: 6, border: '1px solid #d0cdc5',
+                background: 'transparent', color: '#666',
+                fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                transition: 'border-color 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#1a5276'; e.currentTarget.style.color = '#1a5276' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#d0cdc5'; e.currentTarget.style.color = '#666' }}
+            >
+              Upload .md
+            </button>
+
+            <button
+              onClick={() => {
                 try {
-                  const { spec, body } = parseScenarioFile(raw, file.name)
+                  const { spec, body } = parseScenarioFile(anaphylaxisMd, 'anaphylaxis.md')
                   setState(specToCreatorState(spec, body))
                   setError(null)
                 } catch (err) {
                   setError((err as Error).message)
                 }
-              }
-              reader.readAsText(file)
-              e.target.value = ''
-            }}
-          />
+              }}
+              style={{
+                padding: '8px 18px', borderRadius: 6, border: '1px solid #d0cdc5',
+                background: 'transparent', color: '#666',
+                fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                transition: 'border-color 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#1a5276'; e.currentTarget.style.color = '#1a5276' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#d0cdc5'; e.currentTarget.style.color = '#666' }}
+            >
+              Load Example Scenario
+            </button>
 
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            style={{ ...INPUT, cursor: 'pointer', padding: '10px 20px', color: '#555', fontWeight: 600, fontSize: 14 }}
-          >
-            Upload .md
-          </button>
+            <button
+              onClick={() => {
+                const spec = creatorStateToSpec(state)
+                const rawMd = assembleMarkdown(spec, state.debriefBody)
+                const result = loadScenario(rawMd)
+                if (result.ok) {
+                  onBack()
+                } else {
+                  setError(result.error)
+                }
+              }}
+              style={{
+                padding: '8px 22px', borderRadius: 6, border: '2px solid #1a5276',
+                background: '#1a5276', color: '#fff',
+                fontWeight: 700, fontSize: 13, cursor: 'pointer', letterSpacing: 1,
+                textTransform: 'uppercase',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#1a6b9e' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#1a5276' }}
+            >
+              Load into Game ▶
+            </button>
 
-          <button
-            onClick={() => {
-              try {
-                const { spec, body } = parseScenarioFile(anaphylaxisMd, 'anaphylaxis.md')
-                setState(specToCreatorState(spec, body))
-                setError(null)
-              } catch (err) {
-                setError((err as Error).message)
-              }
-            }}
-            style={{ ...INPUT, cursor: 'pointer', padding: '10px 20px', color: '#1a5276', fontWeight: 600, fontSize: 14 }}
-          >
-            Load Example Scenario
-          </button>
-
-          <button
-            onClick={() => {
-              const spec = creatorStateToSpec(state)
-              const rawMd = assembleMarkdown(spec, state.debriefBody)
-              const result = loadScenario(rawMd)
-              if (result.ok) {
-                onBack()
-              } else {
-                setError(result.error)
-              }
-            }}
-            style={{
-              padding: '10px 28px', borderRadius: 6, border: '2px solid #1a5276',
-              background: '#1a5276', color: '#fff',
-              fontWeight: 700, fontSize: 14, cursor: 'pointer', letterSpacing: 1,
-              textTransform: 'uppercase',
-            }}
-          >
-            Load into Game ▶
-          </button>
-
-          <span style={{ fontSize: 12, color: '#bbb' }}>
-            Loaded scenarios appear in the scenario list and persist until you refresh.
-          </span>
+            <span style={{ fontSize: 12, color: '#bbb' }}>
+              Loaded scenarios persist until you refresh.
+            </span>
+          </div>
         </div>
 
         {/* ── Metadata ────────────────────────────────────────────────── */}
