@@ -109,11 +109,27 @@ phases: []
     expect(() => parseScenarioFile(bad, 'x.md')).toThrow()
   })
 
-  it('rejects body-only files with a schema validation error', () => {
-    // gray-matter returns `data: {}` for a file with no frontmatter, so this
-    // surfaces as a schema validation failure rather than a frontmatter error.
-    // Either way the user gets actionable feedback.
+  it('rejects body-only files with a frontmatter error', () => {
     expect(() => parseScenarioFile('# just a body', 'nope.md'))
-      .toThrow(/schema validation failed[\s\S]*id: Invalid input/)
+      .toThrow(/missing or invalid YAML frontmatter/)
+  })
+
+  it('rejects YAML syntax errors with parse error', () => {
+    const bad = `---
+id: x
+label: x: this is invalid: yaml
+---
+`
+    expect(() => parseScenarioFile(bad, 'x.md')).toThrow(/YAML parse error/)
+  })
+
+  it('rejects frontmatter that is not a mapping', () => {
+    const bad = `---
+- just
+- a
+- list
+---
+`
+    expect(() => parseScenarioFile(bad, 'x.md')).toThrow(/frontmatter must be a YAML mapping/)
   })
 })

@@ -16,7 +16,6 @@
     "pre-commit": "npm run lint && npm run typecheck"
   },
   "dependencies": {
-    "gray-matter": "^4.0.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "yaml": "^2.9.0",

@@ -1,4 +1,3 @@
-import matter from 'gray-matter'
 import { parse as parseYaml } from 'yaml'
 import { ScenarioSpecSchema, type ScenarioSpec } from './schema'
 
@@ -10,6 +9,20 @@ export interface ParsedScenario {
 }
 
 /**
+ * Split a `---\n...frontmatter...\n---\n...body...` string. We roll this
+ * ourselves rather than pulling in `gray-matter`, which uses `eval()` in a
+ * code path the bundler warns about even when unused.
+ */
+function splitFrontmatter(source: string): { frontmatter: string; body: string } | null {
+  // Strip an optional BOM (U+FEFF) before the opening fence.
+  const stripped = source.replace(/^\ufeff/, '')
+  const fenceRe = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/
+  const match = fenceRe.exec(stripped)
+  if (!match) return null
+  return { frontmatter: match[1], body: match[2] ?? '' }
+}
+
+/**
  * Parse a `.md` scenario file into a validated ScenarioSpec + body.
  * Errors are descriptive (file path + field path + reason).
  *
@@ -17,22 +30,23 @@ export interface ParsedScenario {
  * @param sourcePath For error messages.
  */
 export function parseScenarioFile(source: string, sourcePath = '<inline>'): ParsedScenario {
-  // gray-matter's `engines.yaml.parse` defaults to js-yaml; we override with
-  // the smaller `yaml` package for consistency with our other parsing.
-  const parsed = matter(source, {
-    engines: {
-      yaml: {
-        parse: (s: string) => parseYaml(s) as object,
-        stringify: () => { throw new Error('not implemented') },
-      },
-    },
-  })
-
-  if (!parsed.data || typeof parsed.data !== 'object' || Array.isArray(parsed.data)) {
-    throw new Error(`${sourcePath}: missing or invalid YAML frontmatter`)
+  const split = splitFrontmatter(source)
+  if (!split) {
+    throw new Error(`${sourcePath}: missing or invalid YAML frontmatter (expected ---/---)`)
   }
 
-  const result = ScenarioSpecSchema.safeParse(parsed.data)
+  let data: unknown
+  try {
+    data = parseYaml(split.frontmatter)
+  } catch (err) {
+    throw new Error(`${sourcePath}: YAML parse error: ${(err as Error).message}`, { cause: err })
+  }
+
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(`${sourcePath}: frontmatter must be a YAML mapping`)
+  }
+
+  const result = ScenarioSpecSchema.safeParse(data)
   if (!result.success) {
     const issues = result.error.issues
       .map(i => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
@@ -42,6 +56,6 @@ export function parseScenarioFile(source: string, sourcePath = '<inline>'): Pars
 
   return {
     spec: result.data,
-    body: parsed.content.trim(),
+    body: split.body.trim(),
   }
 }
