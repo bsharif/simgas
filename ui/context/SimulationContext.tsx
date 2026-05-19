@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
-import { SimulationEngine } from '../../engine/physiology'
+import { SimulationEngine, type SimulationPhase } from '../../engine/physiology'
 import { SCENARIO_MAP, ALL_SCENARIOS } from '../../engine/scenarios/index'
 import { INTERVENTION_MAP } from '../../engine/interventions'
 import type { PatientState } from '../../engine/patient'
@@ -22,7 +22,10 @@ interface SimulationContextValue {
   paused: boolean
   scenario: Scenario | null
   scenarios: Scenario[]
+  phase: SimulationPhase
+  /** @deprecated read `phase === 'resolved'` instead */
   resolved: boolean
+  /** @deprecated read `phase === 'failed'` instead */
   failed: boolean
 }
 
@@ -34,9 +37,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const [eventLog, setEventLog] = useState<string[]>([])
   const [mode, setMode] = useState<Mode>('guided')
   const [scenario, setScenario] = useState<Scenario | null>(null)
-  const [resolved, setResolved] = useState(false)
-  const [failed, setFailed] = useState(false)
   const [paused, setPaused] = useState(false)
+  const [phase, setPhase] = useState<SimulationPhase>(engine.phase)
 
   useEffect(() => {
     const unsubState = engine.subscribe((s) => {
@@ -45,13 +47,16 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
 
     const unsubEvent = engine.onEvent((event) => {
       setEventLog(prev => [...prev, event])
-      if (event.startsWith('✓ Scenario complete')) setResolved(true)
-      if (event.startsWith('✗ Scenario failed')) setFailed(true)
+    })
+
+    const unsubPhase = engine.onPhaseChange((next) => {
+      setPhase(next)
     })
 
     return () => {
       unsubState()
       unsubEvent()
+      unsubPhase()
       engine.stop()
     }
   }, [engine])
@@ -61,8 +66,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     if (!s) return
     setScenario(s)
     setEventLog([])
-    setResolved(false)
-    setFailed(false)
+    setPaused(false)
     engine.start(s)
   }, [engine])
 
@@ -101,8 +105,9 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         paused,
         scenario,
         scenarios: ALL_SCENARIOS,
-        resolved,
-        failed,
+        phase,
+        resolved: phase === 'resolved',
+        failed: phase === 'failed',
       }}
     >
       {children}
