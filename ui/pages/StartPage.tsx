@@ -3,6 +3,7 @@ import { useSimulation } from '../context/SimulationContext'
 
 interface StartPageProps {
   onStart: () => void
+  onOpenCreator: () => void
 }
 
 const scenarioMeta: Record<string, { icon: string; color: string }> = {
@@ -11,7 +12,7 @@ const scenarioMeta: Record<string, { icon: string; color: string }> = {
   'malignant-hyperthermia': { icon: '🌡️', color: '#cc5500' },
 }
 
-const StartPage: FC<StartPageProps> = ({ onStart }) => {
+const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
   const { scenarios, mode, setMode, startScenario } = useSimulation()
   const [selectedId, setSelectedId] = useState<string>('anaphylaxis')
 
@@ -188,6 +189,27 @@ const StartPage: FC<StartPageProps> = ({ onStart }) => {
       }}>
         SimGas is an educational simulation tool. Not for clinical use.
       </div>
+
+      <button
+        onClick={onOpenCreator}
+        style={{
+          marginTop: 12,
+          padding: '8px 20px',
+          borderRadius: 6,
+          border: '1px solid #e0ddd5',
+          background: 'transparent',
+          color: '#bbb',
+          fontSize: 12,
+          cursor: 'pointer',
+          letterSpacing: 2,
+          textTransform: 'uppercase',
+          transition: 'color 0.2s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.color = '#1a5276' }}
+        onMouseLeave={e => { e.currentTarget.style.color = '#bbb' }}
+      >
+        + Create Scenario
+      </button>
     </div>
     </div>
   )
