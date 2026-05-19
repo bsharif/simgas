@@ -7,7 +7,9 @@ import ScenarioSelector from '../components/Scenario/ScenarioSelector'
 import ModeToggle from '../components/Scenario/ModeToggle'
 
 const SimulationView: FC = () => {
-  const { paused, togglePause, resolved, failed, startScenario, scenario } = useSimulation()
+  const { paused, togglePause, phase, startScenario, scenario } = useSimulation()
+  const ended = phase === 'resolved' || phase === 'failed'
+  const failed = phase === 'failed'
 
   return (
     <div style={{
@@ -80,50 +82,51 @@ const SimulationView: FC = () => {
         <RightPanel />
       </div>
 
-      {(resolved || failed) && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.4)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 200,
-        }}>
-          <div style={{
+      {ended && scenario && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            right: 16,
+            bottom: 16,
+            zIndex: 200,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '10px 14px',
             background: '#ffffff',
             border: `2px solid ${failed ? '#cc0000' : '#1a6e4c'}`,
-            borderRadius: 12,
-            padding: '32px 48px',
-            textAlign: 'center',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
-          }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>
-              {failed ? '❌' : '✓'}
-            </div>
-            <h2 style={{ color: '#2c2c2c', margin: '0 0 8px', fontSize: 24 }}>
+            borderRadius: 10,
+            boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
+            maxWidth: 360,
+          }}
+        >
+          <span style={{ fontSize: 22 }}>{failed ? '❌' : '✓'}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#2c2c2c', fontSize: 14, fontWeight: 600 }}>
               {failed ? 'Scenario Failed' : 'Scenario Complete'}
-            </h2>
-            <p style={{ color: '#888', marginBottom: 20, fontSize: 14 }}>
+            </div>
+            <div style={{ color: '#888', fontSize: 12, lineHeight: 1.3 }}>
               {failed
                 ? 'Critical interventions were missed or incorrect.'
                 : 'Patient stabilised successfully.'}
-            </p>
-            <button
-              onClick={() => scenario && startScenario(scenario.id)}
-              style={{
-                padding: '10px 24px',
-                background: '#f5f5f0',
-                border: '1px solid #e0ddd5',
-                borderRadius: 6,
-                color: '#2c2c2c',
-                fontSize: 14,
-                cursor: 'pointer',
-              }}
-            >
-              Restart Scenario
-            </button>
+            </div>
           </div>
+          <button
+            onClick={() => startScenario(scenario.id)}
+            style={{
+              padding: '7px 14px',
+              background: '#f5f5f0',
+              border: '1px solid #e0ddd5',
+              borderRadius: 6,
+              color: '#2c2c2c',
+              fontSize: 13,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Restart
+          </button>
         </div>
       )}
     </div>
