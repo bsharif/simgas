@@ -1,4 +1,4 @@
-import type { PatientState, DriftBaseline } from './patient'
+import type { PatientState, DriftBaseline, TubePosition } from './patient'
 
 export type InterventionCategory = 'drug' | 'airway' | 'ventilation' | 'procedure'
 
@@ -24,6 +24,7 @@ export interface PatientModifier {
   manualVentilationActive?: boolean
   ecgRhythm?: string
   consciousness?: string
+  tubePosition?: TubePosition
   /**
    * Drift targets. When set, the engine smoothly lerps `state.<field>` toward
    * the corresponding `baseline.<field>` each tick (Phase 1.4). Use this for
@@ -41,6 +42,13 @@ export interface Intervention {
   effect: PatientModifier
   durationMs: number
   onsetMs: number
+  /**
+   * Optional gate evaluated by the engine before the effect applies. If it
+   * returns false, the engine fires `preconditionFailureEvent` and does NOT
+   * record the intervention in its history.
+   */
+  precondition?: (state: PatientState) => boolean
+  preconditionFailureEvent?: string
 }
 
 export interface ActiveEffect {
@@ -89,6 +97,7 @@ export function applyModifier(state: PatientState, mod: PatientModifier): void {
   if (mod.manualVentilationActive !== undefined) state.manualVentilationActive = mod.manualVentilationActive
   if (mod.ecgRhythm !== undefined) state.ecgRhythm = mod.ecgRhythm as PatientState['ecgRhythm']
   if (mod.consciousness !== undefined) state.consciousness = mod.consciousness as PatientState['consciousness']
+  if (mod.tubePosition !== undefined) state.tubePosition = mod.tubePosition
 
   if (mod.baseline) {
     const dst = state.driftBaseline
@@ -209,18 +218,31 @@ export const INTERVENTIONS: Intervention[] = [
     label: 'Intubate',
     category: 'airway',
     description: 'Endotracheal intubation',
-    effect: {},
+    effect: { tubePosition: 'trachea' },
     durationMs: 0,
     onsetMs: 0,
+    precondition: (s) => s.tubePosition === 'none',
+    preconditionFailureEvent: '⚠ Tube already in place — extubate first',
   },
   {
     id: 're-intubate',
     label: 'Re-intubate',
     category: 'airway',
-    description: 'Re-attempt endotracheal intubation',
-    effect: {},
+    description: 'Re-attempt endotracheal intubation (extubates first if needed)',
+    effect: { tubePosition: 'trachea' },
     durationMs: 0,
     onsetMs: 0,
+  },
+  {
+    id: 'extubate',
+    label: 'Extubate',
+    category: 'airway',
+    description: 'Remove the endotracheal tube',
+    effect: { tubePosition: 'none' },
+    durationMs: 0,
+    onsetMs: 0,
+    precondition: (s) => s.tubePosition !== 'none',
+    preconditionFailureEvent: '⚠ No tube to extubate',
   },
   {
     id: 'jaw-thrust',

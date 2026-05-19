@@ -1,4 +1,4 @@
-import type { Scenario } from '../scenario'
+import type { Scenario, ScenarioContext } from '../scenario'
 import type { PatientModifier } from '../interventions'
 
 export const oesophagealIntubation: Scenario = {
@@ -9,11 +9,12 @@ export const oesophagealIntubation: Scenario = {
   hints: [
     'Watch the capnography trace — is there a plateau?',
     'Check for chest rise and breath sounds',
-    'If ETCO₂ is zero, remove the tube and ventilate with 100% O₂',
+    'If ETCO₂ is zero, extubate, ventilate with 100% O₂, and re-intubate',
   ],
   initialModifiers: {
     etco2Delta: -0.5,
-    // No CO2 reaching lungs → ETCO2 drifts to ~0.2 kPa.
+    // Tube is in the oesophagus — no CO2 exchange.
+    tubePosition: 'oesophagus',
     baseline: {
       etco2: 0.2,
       spo2: 80,
@@ -21,19 +22,20 @@ export const oesophagealIntubation: Scenario = {
     },
   },
 
-  check(elapsed, interventions) {
+  check(elapsed: number, _interventions: string[], ctx?: ScenarioContext) {
     const events: string[] = []
     const mods: PatientModifier = {}
 
-    // Phase 1.5 will replace this with a tube-position state machine; for now
-    // we still allow re-intubate (or intubate as a stand-in) to "fix" the tube.
-    const hasReintubated = interventions.includes('re-intubate') || interventions.includes('intubate')
+    // Success is now reading the live state, not the intervention list — the
+    // user must actually have a tube in the trachea (extubate + re-intubate,
+    // or use the dedicated re-intubate intervention which forces trachea).
+    const tubeFixed = ctx?.state.tubePosition === 'trachea'
 
     if (elapsed > 5 && elapsed < 6) {
       events.push('⚠ ETCO₂ dropping rapidly — check tube position')
     }
 
-    if (!hasReintubated) {
+    if (!tubeFixed) {
       // Bradycardia after sustained hypoxia.
       if (elapsed > 40) {
         mods.baseline = { hr: 40, spo2: 70, etco2: 0.2 }

@@ -1,6 +1,14 @@
 export type EcgRhythm = 'sinus' | 'vf' | 'vt' | 'asystole' | 'svt'
 export type Consciousness = 'awake' | 'sedated' | 'unconscious'
 
+/**
+ * Where the endotracheal tube is currently sitting.
+ * - 'none': no tube placed; airway managed by face mask / SGA / nothing.
+ * - 'trachea': tube correctly in the trachea (gas exchange working).
+ * - 'oesophagus': tube misplaced in the oesophagus (no gas exchange).
+ */
+export type TubePosition = 'none' | 'trachea' | 'oesophagus'
+
 export interface NibpReading {
   sys: number
   dia: number
@@ -38,6 +46,7 @@ export interface PatientState {
   manualVentilationActive: boolean
   consciousness: Consciousness
   ecgRhythm: EcgRhythm
+  tubePosition: TubePosition
   ecgBuffer: Float32Array
   spo2Buffer: Float32Array
   etco2Buffer: Float32Array
@@ -74,6 +83,7 @@ export function createBaselineState(): PatientState {
     manualVentilationActive: false,
     consciousness: 'awake',
     ecgRhythm: 'sinus',
+    tubePosition: 'trachea',
     ecgBuffer: new Float32Array(BUFFER_SIZE),
     spo2Buffer: new Float32Array(BUFFER_SIZE),
     etco2Buffer: new Float32Array(BUFFER_SIZE),

@@ -101,6 +101,13 @@ export class SimulationEngine {
   applyIntervention(intervention: Intervention): void {
     if (this._phase !== 'running') return
 
+    if (intervention.precondition && !intervention.precondition(this.state)) {
+      if (intervention.preconditionFailureEvent) {
+        this.broadcastEvent(intervention.preconditionFailureEvent)
+      }
+      return
+    }
+
     this.interventions.push(intervention.id)
 
     if (intervention.durationMs > 0) {
@@ -200,7 +207,11 @@ export class SimulationEngine {
         this.appliedScenarioModifiers = true
       }
 
-      const update = this.activeScenario.check(this.elapsedMs / 1000, this.interventions)
+      const update = this.activeScenario.check(
+        this.elapsedMs / 1000,
+        this.interventions,
+        { state: this.state },
+      )
       applyModifier(this.state, update.modifiers)
 
       for (const event of update.events) {
