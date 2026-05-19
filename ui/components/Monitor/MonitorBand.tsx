@@ -78,9 +78,9 @@ const MonitorBand: FC<MonitorBandProps> = ({
         <strong className="monitor-band__numeric-value" style={{ color: numeric.color }}>
           {active ? numericValue(numeric.id, state) : '—'}
         </strong>
-        {numeric.alarmHi !== null && (
+        {(numeric.alarmLo !== null || numeric.alarmHi !== null) && (
           <small className="monitor-band__numeric-limits">
-            {numeric.alarmLo} – {numeric.alarmHi}
+            {numeric.alarmLo ?? '—'} – {numeric.alarmHi ?? '—'}
           </small>
         )}
       </div>
