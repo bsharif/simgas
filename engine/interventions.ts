@@ -53,6 +53,16 @@ export interface Intervention {
    */
   precondition?: (state: PatientState) => boolean
   preconditionFailureEvent?: string
+  /**
+   * Minimum interval between successive applications of this intervention.
+   * Engine blocks rapid re-clicks and fires a cooldown event.
+   */
+  cooldownMs?: number
+  /**
+   * Maximum total applications allowed in a single scenario run.
+   * Engine blocks further attempts after this.
+   */
+  maxDoses?: number
 }
 
 export interface ActiveEffect {
@@ -174,6 +184,7 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { hrDelta: 15, nibpDelta: { sys: 15, map: 10 } },
     durationMs: 120000,
     onsetMs: 5000,
+    cooldownMs: 10000,
   },
   {
     id: 'adrenaline-10',
@@ -183,6 +194,7 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { hrDelta: 30, nibpDelta: { sys: 30, map: 20 } },
     durationMs: 180000,
     onsetMs: 5000,
+    cooldownMs: 15000,
   },
   {
     id: 'metaraminol',
@@ -192,6 +204,7 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { nibpDelta: { sys: 25, map: 15 } },
     durationMs: 120000,
     onsetMs: 3000,
+    cooldownMs: 8000,
   },
   {
     id: 'ephedrine',
@@ -201,6 +214,7 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { hrDelta: 20, nibpDelta: { sys: 20, map: 12 } },
     durationMs: 90000,
     onsetMs: 3000,
+    cooldownMs: 10000,
   },
   {
     id: 'propofol',
@@ -210,6 +224,7 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { hrDelta: -5, nibpDelta: { sys: -15, map: -10 }, consciousness: 'unconscious' },
     durationMs: 300000,
     onsetMs: 2000,
+    cooldownMs: 5000,
   },
   {
     id: 'dantrolene',
@@ -219,6 +234,8 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { tempDelta: -0.5 },
     durationMs: 300000,
     onsetMs: 60000,
+    cooldownMs: 30000,
+    maxDoses: 5,
   },
   {
     id: 'intubate',

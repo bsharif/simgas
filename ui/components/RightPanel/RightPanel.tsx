@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, type FC } from 'react'
 import { INTERVENTIONS } from '../../../engine/interventions'
 import { useSimulation } from '../../context/SimulationContext'
-import type { InterventionCategory } from '../../../engine/interventions'
+import type { Intervention, InterventionCategory } from '../../../engine/interventions'
 import type { PatientState } from '../../../engine/patient'
+import type { DoseEntry } from '../../../engine/doseLedger'
 
 type TabId = 'drug' | 'airway' | 'ventilation' | 'procedure' | 'machine'
 
@@ -217,10 +218,33 @@ function MachinePanel() {
   )
 }
 
+function describeCooldown(
+  intervention: Intervention,
+  entry: DoseEntry | undefined,
+  elapsedSeconds: number,
+): { onCooldown: boolean; remainingSec: number; maxedOut: boolean } {
+  if (!entry) return { onCooldown: false, remainingSec: 0, maxedOut: false }
+  const maxedOut = intervention.maxDoses !== undefined && entry.count >= intervention.maxDoses
+  if (maxedOut) return { onCooldown: false, remainingSec: 0, maxedOut: true }
+  if (!intervention.cooldownMs) return { onCooldown: false, remainingSec: 0, maxedOut: false }
+  const elapsedSinceLast = (elapsedSeconds - entry.lastAppliedSec) * 1000
+  const remaining = intervention.cooldownMs - elapsedSinceLast
+  return { onCooldown: remaining > 0, remainingSec: remaining / 1000, maxedOut: false }
+}
+
 const RightPanel: FC = () => {
-  const { applyIntervention, eventLog } = useSimulation()
+  const { applyIntervention, eventLog, doseLedger, elapsedSeconds, phase } = useSimulation()
   const [activeTab, setActiveTab] = useState<TabId>('drug')
+  const [cooldownTick, setCooldownTick] = useState(0)
   const logRef = useRef<HTMLDivElement>(null)
+
+  // Tick at 5 Hz while running so cooldown timers count down smoothly without
+  // tying every button to the simulation state.
+  useEffect(() => {
+    if (phase !== 'running') return
+    const id = window.setInterval(() => setCooldownTick(c => c + 1), 200)
+    return () => window.clearInterval(id)
+  }, [phase])
 
   useEffect(() => {
     if (logRef.current) {
@@ -281,25 +305,45 @@ const RightPanel: FC = () => {
         gap: 6,
         alignContent: 'start',
       }}>
-        {items.map(item => (
+        {items.map(item => {
+          const entry = doseLedger.get(item.id)
+          const { onCooldown, remainingSec, maxedOut } = describeCooldown(item, entry, elapsedSeconds)
+          // Reference cooldownTick so React re-renders this row on each tick.
+          void cooldownTick
+          const disabled = onCooldown || maxedOut
+          const badge = entry ? `× ${entry.count}` : null
+          const subtitle = maxedOut
+            ? `Max ${item.maxDoses} doses reached`
+            : onCooldown
+              ? `Cooldown ${remainingSec.toFixed(0)}s`
+              : item.description
+
+          return (
           <button
             key={item.id}
             onClick={() => applyIntervention(item.id)}
+            disabled={disabled}
             className={activeTab === 'drug' ? 'drug-action-button' : undefined}
-            style={activeTab === 'drug' ? undefined : {
+            style={activeTab === 'drug' ? {
+              opacity: disabled ? 0.45 : 1,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              position: 'relative',
+            } : {
               padding: '14px 16px',
               border: '1px solid #e0ddd5',
               borderRadius: 6,
               background: '#fafafa',
               color: '#2c2c2c',
-              cursor: 'pointer',
+              cursor: disabled ? 'not-allowed' : 'pointer',
               fontSize: 15,
               textAlign: 'left',
               lineHeight: 1.35,
               transition: 'background 0.1s, border-color 0.1s',
+              opacity: disabled ? 0.45 : 1,
+              position: 'relative',
             }}
             onMouseEnter={e => {
-              if (activeTab === 'drug') return
+              if (activeTab === 'drug' || disabled) return
               e.currentTarget.style.background = '#f0f0e8'
               e.currentTarget.style.borderColor = '#ccc'
             }}
@@ -309,6 +353,23 @@ const RightPanel: FC = () => {
               e.currentTarget.style.borderColor = '#e0ddd5'
             }}
           >
+            {badge && (
+              <span style={{
+                position: 'absolute',
+                top: 4,
+                right: 6,
+                fontSize: 10,
+                fontWeight: 700,
+                color: '#1a6e4c',
+                background: '#eaf6f0',
+                border: '1px solid #b9dac8',
+                borderRadius: 10,
+                padding: '1px 6px',
+                pointerEvents: 'none',
+              }}>
+                {badge}
+              </span>
+            )}
             {activeTab === 'drug' && syringeLabels[item.id] ? (
               <>
                 <div className={`syringe-label ${syringeLabels[item.id].className}`}>
@@ -318,18 +379,19 @@ const RightPanel: FC = () => {
                     <strong>{syringeLabels[item.id].dose}</strong>
                   </div>
                 </div>
-                <div className="drug-action-button__description">{item.description}</div>
+                <div className="drug-action-button__description">{subtitle}</div>
               </>
             ) : (
               <>
                 <div>{item.label}</div>
                 <div style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>
-                  {item.description}
+                  {subtitle}
                 </div>
               </>
             )}
           </button>
-        ))}
+          )
+        })}
       </div>
       )}
 

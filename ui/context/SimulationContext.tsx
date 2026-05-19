@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import { SimulationEngine, type SimulationPhase } from '../../engine/physiology'
 import { SCENARIO_MAP, ALL_SCENARIOS } from '../../engine/scenarios/index'
 import { INTERVENTION_MAP } from '../../engine/interventions'
+import type { DoseEntry } from '../../engine/doseLedger'
 import type { PatientState } from '../../engine/patient'
 import type { Scenario } from '../../engine/scenario'
 
@@ -24,6 +25,7 @@ interface SimulationContextValue {
   scenarios: Scenario[]
   phase: SimulationPhase
   elapsedSeconds: number
+  doseLedger: ReadonlyMap<string, DoseEntry>
   /** @deprecated read `phase === 'resolved'` instead */
   resolved: boolean
   /** @deprecated read `phase === 'failed'` instead */
@@ -41,6 +43,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const [paused, setPaused] = useState(false)
   const [phase, setPhase] = useState<SimulationPhase>(engine.phase)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [doseLedger, setDoseLedger] = useState<ReadonlyMap<string, DoseEntry>>(() => new Map())
 
   useEffect(() => {
     // Engine broadcasts state at ~60 Hz, but numerics on a real monitor refresh
@@ -71,10 +74,16 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       lastFlushTs = performance.now()
     })
 
+    const unsubDose = engine.onDoseLedgerChange((next) => {
+      // Snapshot to a new Map so React detects the change.
+      setDoseLedger(new Map(next))
+    })
+
     return () => {
       unsubState()
       unsubEvent()
       unsubPhase()
+      unsubDose()
       engine.stop()
     }
   }, [engine])
@@ -86,6 +95,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setEventLog([])
     setPaused(false)
     setElapsedSeconds(0)
+    setDoseLedger(new Map())
     engine.start(s)
   }, [engine])
 
@@ -126,6 +136,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         scenarios: ALL_SCENARIOS,
         phase,
         elapsedSeconds,
+        doseLedger,
         resolved: phase === 'resolved',
         failed: phase === 'failed',
       }}

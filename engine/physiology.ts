@@ -1,6 +1,7 @@
 import { type PatientState, createBaselineState, BUFFER_SIZE } from './patient'
 import type { Scenario } from './scenario'
 import { type Intervention, type ActiveEffect, applyModifier, applyDrift, createActiveEffect } from './interventions'
+import { type DoseEntry, makeDoseLedger, recordDose, canApply } from './doseLedger'
 import { generateECGSample, generateSpO2Sample, generateETCO2Sample, generateRespSample, generateArterialSample, SAMPLES_PER_TICK } from './waveforms'
 
 export type SimulationPhase = 'idle' | 'running' | 'resolved' | 'failed'
@@ -8,12 +9,14 @@ export type SimulationPhase = 'idle' | 'running' | 'resolved' | 'failed'
 type StateSubscriber = (state: PatientState) => void
 type EventSubscriber = (event: string) => void
 type PhaseSubscriber = (phase: SimulationPhase) => void
+type DoseLedgerSubscriber = (ledger: ReadonlyMap<string, DoseEntry>) => void
 
 export class SimulationEngine {
   state: PatientState
   private subscribers = new Set<StateSubscriber>()
   private eventSubscribers = new Set<EventSubscriber>()
   private phaseSubscribers = new Set<PhaseSubscriber>()
+  private doseLedgerSubscribers = new Set<DoseLedgerSubscriber>()
   private activeEffects: ActiveEffect[] = []
   private activeScenario: Scenario | null = null
   private appliedScenarioModifiers = false
@@ -21,6 +24,7 @@ export class SimulationEngine {
   private rafId: number | null = null
   private lastTimestamp = 0
   private interventions: string[] = []
+  private doseLedger = makeDoseLedger()
   private _paused = false
   private _phase: SimulationPhase = 'idle'
   private lastManualBreathMs = 0
@@ -37,10 +41,12 @@ export class SimulationEngine {
     this.appliedScenarioModifiers = false
     this.activeEffects = []
     this.interventions = []
+    this.doseLedger = makeDoseLedger()
     this.activeScenario = scenario
     this._paused = false
     if (scenario.reset) scenario.reset()
     this.setPhase('running')
+    this.broadcastDoseLedger()
 
     this.broadcastEvent(`▶ Starting scenario: ${scenario.label}`)
     this.lastTimestamp = performance.now()
@@ -109,7 +115,19 @@ export class SimulationEngine {
       return
     }
 
+    const elapsedSec = this.elapsedMs / 1000
+    const gate = canApply(this.doseLedger, intervention, elapsedSec)
+    if (!gate.ok) {
+      if (gate.reason === 'cooldown') {
+        this.broadcastEvent(`⏱ ${intervention.label} on cooldown (${gate.remainingSec.toFixed(0)}s remaining)`)
+      } else {
+        this.broadcastEvent(`⛔ ${intervention.label}: max doses reached`)
+      }
+      return
+    }
+
     this.interventions.push(intervention.id)
+    recordDose(this.doseLedger, intervention.id, elapsedSec)
 
     if (intervention.durationMs > 0) {
       this.activeEffects.push(createActiveEffect(intervention))
@@ -118,6 +136,12 @@ export class SimulationEngine {
     }
 
     this.broadcastEvent(`→ ${intervention.label}`)
+    this.broadcastDoseLedger()
+  }
+
+  /** Snapshot of the current dose ledger for UI consumers. */
+  getDoseLedger(): ReadonlyMap<string, DoseEntry> {
+    return this.doseLedger
   }
 
   updateMachineSettings(settings: Partial<Pick<PatientState, 'fio2' | 'vt' | 'peep' | 'gasFlow' | 'rr' | 'sevoflurane' | 'ventilationMode'>>): void {
@@ -187,6 +211,15 @@ export class SimulationEngine {
   onPhaseChange(cb: PhaseSubscriber): () => void {
     this.phaseSubscribers.add(cb)
     return () => this.phaseSubscribers.delete(cb)
+  }
+
+  onDoseLedgerChange(cb: DoseLedgerSubscriber): () => void {
+    this.doseLedgerSubscribers.add(cb)
+    return () => this.doseLedgerSubscribers.delete(cb)
+  }
+
+  private broadcastDoseLedger(): void {
+    this.doseLedgerSubscribers.forEach(cb => cb(this.doseLedger))
   }
 
   private tick = (timestamp: number): void => {
