@@ -3,6 +3,7 @@ import { useSimulation } from '../context/SimulationContext'
 import { assembleMarkdown } from '../../engine/scenarios/dsl/assemble'
 import { parseScenarioFile } from '../../engine/scenarios/dsl/parse'
 import type { ScenarioSpec, Snap, Baseline } from '../../engine/scenarios/dsl/schema'
+import anaphylaxisMd from '../../scenarios/anaphylaxis.md?raw'
 
 // ── form state types ──────────────────────────────────────────────────────────
 
@@ -963,6 +964,21 @@ const ScenarioCreator: FC<ScenarioCreatorProps> = ({ onBack }) => {
             style={{ ...INPUT, cursor: 'pointer', padding: '10px 20px', color: '#555', fontWeight: 600, fontSize: 14 }}
           >
             Upload .md
+          </button>
+
+          <button
+            onClick={() => {
+              try {
+                const { spec, body } = parseScenarioFile(anaphylaxisMd, 'anaphylaxis.md')
+                setState(specToCreatorState(spec, body))
+                setError(null)
+              } catch (err) {
+                setError((err as Error).message)
+              }
+            }}
+            style={{ ...INPUT, cursor: 'pointer', padding: '10px 20px', color: '#1a5276', fontWeight: 600, fontSize: 14 }}
+          >
+            Load Example Scenario
           </button>
 
           <button
