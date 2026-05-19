@@ -50,15 +50,73 @@ drug effects, and machine setting changes all feed into the same patient state.
 
 ## Scenarios
 
-Each scenario is implemented as a pure TypeScript object with initial modifiers
-and a time-based `check()` function. Scenarios derive their state from elapsed
-time and the interventions applied by the user.
+Each scenario is a Markdown file under `/scenarios/` with YAML frontmatter
+(declarative phase machine) and a body (debrief content shown after the
+scenario ends). The engine compiles the frontmatter into a phase state machine
+at load time — authors don't need to touch TypeScript.
 
 | Scenario | Focus | Expected actions |
 | --- | --- | --- |
 | Anaphylaxis | Hypotension, tachycardia, and falling SpO2. | Give adrenaline, increase oxygen, and give fluids. |
-| Oesophageal intubation | Falling ETCO2 and hypoxia after intubation. | Recognise tube misplacement and re-intubate. |
+| Oesophageal intubation | Falling ETCO2 and hypoxia after intubation. | Recognise tube misplacement, extubate, and re-intubate. |
 | Malignant hyperthermia | Rising ETCO2, temperature, and heart rate. | Give dantrolene, stop volatile agent, and hyperventilate. |
+
+### Authoring a scenario
+
+Drop a new `.md` file into `/scenarios/`. The frontmatter shape:
+
+```yaml
+---
+id: my-scenario
+label: My Scenario
+description: One-line summary shown on the StartPage.
+difficulty: medium               # easy | medium | hard
+
+initial_state:                    # snap values once at start
+  hr: 120
+  spo2: 92
+
+initial_baseline:                 # initial drift targets
+  hr: 130
+  spo2: 88
+
+phases:
+  - id: onset
+    baseline: { hr: 130 }         # vitals drift toward these
+    events:
+      - at: 10s
+        text: "⚠ Something is happening"
+
+  - id: recovery
+    enter_when: "any('adrenaline-*')"
+    baseline: { hr: 85 }
+    resolve_when: "phase_elapsed > 60"
+    resolve_events: ["✓ Stabilised"]
+    resolve_snap: { hr: 78 }       # final state, applied instantly
+
+  - id: untreated
+    enter_when: "time > 30 && !any('adrenaline-*')"
+    baseline: { hr: 155 }
+    fail_when: "phase_elapsed > 60"
+    fail_events: ["❌ Cardiac arrest"]
+    fail_snap: { ecgRhythm: asystole }
+
+hints:
+  - "Top-level hints shown in Guided mode"
+---
+
+# Debrief title
+
+Markdown body shown in the post-scenario debrief view.
+```
+
+Phase selection: **last matching `enter_when` wins** — list phases from
+least- to most-specific. Predicate functions: `any('id-glob')`,
+`count('id')`, `phase_done('id')`. Variables: `time`, `phase_elapsed`, `hr`,
+`spo2`, `etco2`, `rr`, `temp`, `tube_position`. Operators: `&& || ! == != < <= > >=`.
+
+Validate before committing: `npm run lint:scenarios` checks schema,
+intervention references, and that every scenario can terminate.
 
 ## Monitor details
 

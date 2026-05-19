@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b",
+    "lint:scenarios": "tsx scripts/lint-scenarios.ts",
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {
