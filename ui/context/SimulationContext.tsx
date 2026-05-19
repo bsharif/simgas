@@ -1,7 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react'
 import { SimulationEngine, type SimulationPhase } from '../../engine/physiology'
 import { SCENARIO_MAP, ALL_SCENARIOS } from '../../engine/scenarios/index'
+import { parseScenarioFile } from '../../engine/scenarios/dsl/parse'
+import { specToScenario } from '../../engine/scenarios/dsl/interpret'
 import { INTERVENTION_MAP } from '../../engine/interventions'
 import type { DoseEntry } from '../../engine/doseLedger'
 import type { PatientState } from '../../engine/patient'
@@ -23,6 +25,7 @@ interface SimulationContextValue {
   paused: boolean
   scenario: Scenario | null
   scenarios: Scenario[]
+  loadScenario: (rawMd: string) => { ok: true } | { ok: false; error: string }
   phase: SimulationPhase
   elapsedSeconds: number
   doseLedger: ReadonlyMap<string, DoseEntry>
@@ -36,6 +39,29 @@ const SimulationContext = createContext<SimulationContextValue | null>(null)
 
 export function SimulationProvider({ children }: { children: ReactNode }) {
   const [engine] = useState(() => new SimulationEngine())
+  const [dynamicScenarios, setDynamicScenarios] = useState<Scenario[]>([])
+
+  const allScenarios = useMemo(() => {
+    const dynamicIds = new Set(dynamicScenarios.map(s => s.id))
+    return [...ALL_SCENARIOS.filter(s => !dynamicIds.has(s.id)), ...dynamicScenarios]
+  }, [dynamicScenarios])
+
+  const combinedMap = useMemo(
+    () => new Map([...SCENARIO_MAP, ...dynamicScenarios.map(s => [s.id, s] as [string, Scenario])]),
+    [dynamicScenarios]
+  )
+
+  const loadScenario = useCallback((rawMd: string): { ok: true } | { ok: false; error: string } => {
+    try {
+      const { spec, body } = parseScenarioFile(rawMd, '<upload>')
+      const scenario = specToScenario(spec)
+      scenario.debriefBody = body
+      setDynamicScenarios(prev => [...prev.filter(s => s.id !== scenario.id), scenario])
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  }, [])
   const [state, setState] = useState<PatientState>(engine.state)
   const [eventLog, setEventLog] = useState<string[]>([])
   const [mode, setMode] = useState<Mode>('guided')
@@ -89,7 +115,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   }, [engine])
 
   const startScenario = useCallback((id: string) => {
-    const s = SCENARIO_MAP.get(id)
+    const s = combinedMap.get(id)
     if (!s) return
     setScenario(s)
     setEventLog([])
@@ -97,7 +123,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setElapsedSeconds(0)
     setDoseLedger(new Map())
     engine.start(s)
-  }, [engine])
+  }, [engine, combinedMap])
 
   const applyIntervention = useCallback((id: string) => {
     const intervention = INTERVENTION_MAP.get(id)
@@ -133,7 +159,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         togglePause,
         paused,
         scenario,
-        scenarios: ALL_SCENARIOS,
+        scenarios: allScenarios,
+        loadScenario,
         phase,
         elapsedSeconds,
         doseLedger,
