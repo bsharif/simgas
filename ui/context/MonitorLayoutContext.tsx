@@ -32,7 +32,7 @@ function loadLayout(): MonitorLayout {
       // Minimal shape check — if storage is from a different schema version,
       // fall back to defaults rather than rendering with malformed data.
       if (parsed && Array.isArray(parsed.traces) && Array.isArray(parsed.numerics)) {
-        return parsed
+        return { ...parsed, nibpEnabled: (parsed.nibpEnabled as boolean | undefined) ?? true }
       }
     }
   } catch {
