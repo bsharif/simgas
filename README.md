@@ -1,73 +1,178 @@
-# React + TypeScript + Vite
+# SimGas
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+SimGas is a browser-based anaesthetic simulation monitor for practising
+peri-operative emergencies. It combines a Philips IntelliVue-inspired patient
+monitor, a simulation physiology engine, drug and airway interventions, and an
+anaesthetic machine control panel in a Vite, React, and TypeScript app.
 
-Currently, two official plugins are available:
+> **Note:** SimGas is an educational simulation tool. It is not for clinical
+> use, diagnosis, treatment, or patient monitoring.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+![SimGas monitor showing waveforms, syringe-style drug controls, and the machine panel.](docs/assets/simgas-monitor.png)
 
-## React Compiler
+## Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+SimGas focuses on a high-fidelity training surface rather than a generic
+dashboard. The app presents clinical information in the same dense, colour-coded
+style trainees see in theatre and simulation suites.
 
-## Expanding the ESLint configuration
+- IntelliVue-style monitor layout with dark screen, status bar, soft keys, and
+  colour-coded numerics.
+- Live waveform rendering for ECG, plethysmography, capnography, and respiratory
+  rate.
+- Dynamic vital signs for heart rate, SpO2, non-invasive blood pressure,
+  end-tidal CO2, respiratory rate, temperature, and FiO2.
+- Scenario progression for anaphylaxis, oesophageal intubation, and malignant
+  hyperthermia.
+- Intervention tabs for drugs, airway actions, ventilation changes, and
+  procedures.
+- Syringe-label drug buttons based on anaesthetic syringe labelling patterns.
+- Anaesthetic machine panel for FiO2, tidal volume, PEEP, gas flow, respiratory
+  rate, and sevoflurane concentration.
+- Manual ventilation mode with a press-and-hold bag control.
+- Guided, exam, and free-play modes with contextual hints and an event log.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Screens and workflow
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+The app starts with a scenario picker. You select a case and simulation mode,
+then start the scenario to enter the monitor and intervention workspace.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+The simulation screen has two main areas:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- The left side shows the patient monitor, waveforms, NBP history, and clock.
+- The right side shows intervention tabs, machine settings, hints, and the
+  event log.
+
+The monitor updates continuously from the physiology engine. Scenario checks,
+drug effects, and machine setting changes all feed into the same patient state.
+
+## Scenarios
+
+Each scenario is implemented as a pure TypeScript object with initial modifiers
+and a time-based `check()` function. Scenarios derive their state from elapsed
+time and the interventions applied by the user.
+
+| Scenario | Focus | Expected actions |
+| --- | --- | --- |
+| Anaphylaxis | Hypotension, tachycardia, and falling SpO2. | Give adrenaline, increase oxygen, and give fluids. |
+| Oesophageal intubation | Falling ETCO2 and hypoxia after intubation. | Recognise tube misplacement and re-intubate. |
+| Malignant hyperthermia | Rising ETCO2, temperature, and heart rate. | Give dantrolene, stop volatile agent, and hyperventilate. |
+
+## Monitor details
+
+The monitor is designed to resemble a Philips IntelliVue screen while remaining
+fully synthetic and browser-rendered.
+
+- ECG is generated from Gaussian P, Q, R, S, and T components.
+- Pleth is generated from the heart rate and saturation value.
+- ETCO2 uses a respiratory cycle and supports capnography-like plateau shapes.
+- Respiration uses a separate synthetic respiratory waveform.
+- NBP readings are derived from scenario state and displayed as current and
+  recent readings.
+
+Waveform buffers use `Float32Array` ring buffers, with a shared write position
+stored on the patient state.
+
+## Anaesthetic machine
+
+The Machine tab provides controls for core ventilator and gas delivery settings.
+These controls update the shared simulation state.
+
+- `FiO2`: oxygen fraction, displayed as a percentage.
+- `VT`: tidal volume in millilitres.
+- `PEEP`: positive end-expiratory pressure in cmH2O.
+- `Gas Flow`: fresh gas flow in litres per minute.
+- `RR`: respiratory rate in breaths per minute.
+- `Sevoflurane`: volatile agent concentration as a percentage.
+
+Manual mode switches the display from volume-controlled ventilation to a manual
+bag control. Press and hold the bag to simulate manual ventilation.
+
+## Drug controls
+
+Drug buttons use syringe-label styling so the visual language is closer to
+anaesthetic practice.
+
+- Adrenaline uses a black and violet split label.
+- Metaraminol and ephedrine use vasopressor violet labels.
+- Propofol uses an induction-drug yellow label.
+- Dantrolene uses a neutral high-contrast label.
+
+The labels are visual cues for simulation only. Users must still read the drug
+name and dose before applying an intervention.
+
+## Project structure
+
+The codebase separates simulation logic from React UI. The engine imports no UI
+code, which keeps the physiology model portable.
+
+```text
+engine/
+  interventions.ts        Intervention definitions and state modifiers
+  patient.ts              Patient state, normal ranges, and baseline state
+  physiology.ts           Simulation engine and animation loop
+  scenario.ts             Scenario interfaces
+  scenarios/              Scenario implementations
+  waveforms.ts            Synthetic waveform generators
+
+ui/
+  components/Monitor/     Monitor layout and waveform canvases
+  components/RightPanel/  Intervention and machine controls
+  context/                React bridge to the simulation engine
+  pages/                  Start and simulation screens
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Requirements
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+You need Node.js and npm installed. The project was built with the versions
+declared in `package.json` and `package-lock.json`.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Run locally
+
+Use npm to install dependencies and start the Vite dev server.
+
+```bash
+npm install
+npm run dev
 ```
+
+Open the local URL printed by Vite, usually `http://127.0.0.1:5173/`.
+
+## Validate changes
+
+Run these checks before committing changes.
+
+```bash
+npm run build
+npm run lint
+npm test
+```
+
+`npm run build` runs TypeScript checking through `tsc -b`, then builds the Vite
+bundle. `npm test` runs the engine tests with Vitest.
+
+## Development notes
+
+The engine mutates `PatientState` in place on each animation tick, then the
+React context publishes a shallow state copy to trigger rendering. Waveform
+arrays are reused rather than reallocated.
+
+When you add new simulation features:
+
+- Add patient fields to `engine/patient.ts`.
+- Add scenario or intervention modifiers in `engine/interventions.ts`.
+- Keep waveform generation pure in `engine/waveforms.ts`.
+- Expose UI actions through `ui/context/SimulationContext.tsx`.
+- Add controls in `ui/components/RightPanel/RightPanel.tsx` when users need to
+  interact with the setting.
+
+## License and attribution
+
+The syringe labelling reference PDF is included for local design reference. The
+app uses synthetic data and does not contain patient-identifiable information.
+
+## Next steps
+
+Useful next improvements include adding persistence for scenario results,
+expanding the scenario library, adding UI tests for monitor interactions, and
+linking machine settings more deeply into the physiology model.
