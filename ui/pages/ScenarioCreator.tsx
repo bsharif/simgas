@@ -829,6 +829,80 @@ const ScenarioCreator: FC<ScenarioCreatorProps> = ({ onBack }) => {
           </div>
         )}
 
+        {/* ── Action bar ────────────────────────────────────────────────── */}
+        <div style={{ marginTop: 12, marginBottom: 24, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".md,text/markdown"
+            style={{ display: 'none' }}
+            onChange={e => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              const reader = new FileReader()
+              reader.onload = evt => {
+                const raw = evt.target?.result as string
+                try {
+                  const { spec, body } = parseScenarioFile(raw, file.name)
+                  setState(specToCreatorState(spec, body))
+                  setError(null)
+                } catch (err) {
+                  setError((err as Error).message)
+                }
+              }
+              reader.readAsText(file)
+              e.target.value = ''
+            }}
+          />
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{ ...INPUT, cursor: 'pointer', padding: '10px 20px', color: '#555', fontWeight: 600, fontSize: 14 }}
+          >
+            Upload .md
+          </button>
+
+          <button
+            onClick={() => {
+              try {
+                const { spec, body } = parseScenarioFile(anaphylaxisMd, 'anaphylaxis.md')
+                setState(specToCreatorState(spec, body))
+                setError(null)
+              } catch (err) {
+                setError((err as Error).message)
+              }
+            }}
+            style={{ ...INPUT, cursor: 'pointer', padding: '10px 20px', color: '#1a5276', fontWeight: 600, fontSize: 14 }}
+          >
+            Load Example Scenario
+          </button>
+
+          <button
+            onClick={() => {
+              const spec = creatorStateToSpec(state)
+              const rawMd = assembleMarkdown(spec, state.debriefBody)
+              const result = loadScenario(rawMd)
+              if (result.ok) {
+                onBack()
+              } else {
+                setError(result.error)
+              }
+            }}
+            style={{
+              padding: '10px 28px', borderRadius: 6, border: '2px solid #1a5276',
+              background: '#1a5276', color: '#fff',
+              fontWeight: 700, fontSize: 14, cursor: 'pointer', letterSpacing: 1,
+              textTransform: 'uppercase',
+            }}
+          >
+            Load into Game ▶
+          </button>
+
+          <span style={{ fontSize: 12, color: '#bbb' }}>
+            Loaded scenarios appear in the scenario list and persist until you refresh.
+          </span>
+        </div>
+
         {/* ── Metadata ────────────────────────────────────────────────── */}
         <SectionHeader title="Metadata" />
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -932,80 +1006,6 @@ const ScenarioCreator: FC<ScenarioCreatorProps> = ({ onBack }) => {
           placeholder={'# Scenario Name — debrief\n\n## Recognition\n\n- Key sign 1\n\n## Management\n\n1. Step one\n'}
           onChange={e => setState(s => ({ ...s, debriefBody: e.target.value }))}
         />
-
-        {/* ── Footer actions ───────────────────────────────────────────── */}
-        <div style={{ marginTop: 32, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".md,text/markdown"
-            style={{ display: 'none' }}
-            onChange={e => {
-              const file = e.target.files?.[0]
-              if (!file) return
-              const reader = new FileReader()
-              reader.onload = evt => {
-                const raw = evt.target?.result as string
-                try {
-                  const { spec, body } = parseScenarioFile(raw, file.name)
-                  setState(specToCreatorState(spec, body))
-                  setError(null)
-                } catch (err) {
-                  setError((err as Error).message)
-                }
-              }
-              reader.readAsText(file)
-              e.target.value = ''
-            }}
-          />
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            style={{ ...INPUT, cursor: 'pointer', padding: '10px 20px', color: '#555', fontWeight: 600, fontSize: 14 }}
-          >
-            Upload .md
-          </button>
-
-          <button
-            onClick={() => {
-              try {
-                const { spec, body } = parseScenarioFile(anaphylaxisMd, 'anaphylaxis.md')
-                setState(specToCreatorState(spec, body))
-                setError(null)
-              } catch (err) {
-                setError((err as Error).message)
-              }
-            }}
-            style={{ ...INPUT, cursor: 'pointer', padding: '10px 20px', color: '#1a5276', fontWeight: 600, fontSize: 14 }}
-          >
-            Load Example Scenario
-          </button>
-
-          <button
-            onClick={() => {
-              const spec = creatorStateToSpec(state)
-              const rawMd = assembleMarkdown(spec, state.debriefBody)
-              const result = loadScenario(rawMd)
-              if (result.ok) {
-                onBack()
-              } else {
-                setError(result.error)
-              }
-            }}
-            style={{
-              padding: '10px 28px', borderRadius: 6, border: '2px solid #1a5276',
-              background: '#1a5276', color: '#fff',
-              fontWeight: 700, fontSize: 14, cursor: 'pointer', letterSpacing: 1,
-              textTransform: 'uppercase',
-            }}
-          >
-            Load into Game ▶
-          </button>
-
-          <span style={{ fontSize: 12, color: '#bbb' }}>
-            Loaded scenarios appear in the scenario list and persist until you refresh.
-          </span>
-        </div>
 
       </div>
     </div>
