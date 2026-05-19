@@ -39,6 +39,7 @@ export class SimulationEngine {
     this.interventions = []
     this.activeScenario = scenario
     this._paused = false
+    if (scenario.reset) scenario.reset()
     this.setPhase('running')
 
     this.broadcastEvent(`▶ Starting scenario: ${scenario.label}`)
