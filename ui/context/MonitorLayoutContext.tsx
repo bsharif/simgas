@@ -18,6 +18,7 @@ interface MonitorLayoutContextValue {
   updateNumeric: (id: NumericId, partial: Partial<MonitorNumeric>) => void
   applyPreset: (name: keyof typeof PRESETS) => void
   resetToDefault: () => void
+  setNibpEnabled: (enabled: boolean) => void
 }
 
 const MonitorLayoutContext = createContext<MonitorLayoutContextValue | null>(null)
@@ -73,8 +74,12 @@ export function MonitorLayoutProvider({ children }: { children: ReactNode }) {
     setLayoutState(DEFAULT_LAYOUT)
   }, [])
 
+  const setNibpEnabled = useCallback((enabled: boolean) => {
+    setLayoutState(prev => ({ ...prev, nibpEnabled: enabled }))
+  }, [])
+
   return (
-    <MonitorLayoutContext.Provider value={{ layout, updateTrace, updateNumeric, applyPreset, resetToDefault }}>
+    <MonitorLayoutContext.Provider value={{ layout, updateTrace, updateNumeric, applyPreset, resetToDefault, setNibpEnabled }}>
       {children}
     </MonitorLayoutContext.Provider>
   )

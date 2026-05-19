@@ -10,7 +10,7 @@ import { PRESETS } from '../../../engine/monitor/layout'
  * Triggered by the gear button in SimulationView's header.
  */
 const MonitorSettings: FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { layout, updateTrace, updateNumeric, applyPreset, resetToDefault } = useMonitorLayout()
+  const { layout, updateTrace, updateNumeric, applyPreset, resetToDefault, setNibpEnabled } = useMonitorLayout()
 
   return (
     <div
@@ -152,6 +152,20 @@ const MonitorSettings: FC<{ onClose: () => void }> = ({ onClose }) => {
             </button>
           </label>
         ))}
+      </div>
+
+      <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #eeebe4' }}>
+        <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+          Panels
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={layout.nibpEnabled}
+            onChange={e => setNibpEnabled(e.currentTarget.checked)}
+          />
+          <span style={{ flex: 1 }}>NIBP panel</span>
+        </label>
       </div>
     </div>
   )
