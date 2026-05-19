@@ -2,6 +2,7 @@ import type { FC } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 import Monitor from '../components/Monitor/Monitor'
 import { MonitorSettingsButton } from '../components/Monitor/MonitorSettings'
+import AlarmMuteButton from '../components/Monitor/AlarmMuteButton'
 import RightPanel from '../components/RightPanel/RightPanel'
 import HintsPanel from '../components/Sidebar/HintsPanel'
 import ScenarioSelector from '../components/Scenario/ScenarioSelector'
@@ -42,6 +43,7 @@ const SimulationView: FC = () => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModeToggle />
+          <AlarmMuteButton />
           <MonitorSettingsButton />
           <button
             onClick={togglePause}

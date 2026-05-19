@@ -1,6 +1,7 @@
 import { useMemo, type FC, type ReactNode } from 'react'
 import { useSimulation } from '../../context/SimulationContext'
 import { useMonitorLayout } from '../../context/MonitorLayoutContext'
+import { useAlarmsContext } from '../../context/AlarmsContext'
 import type { EcgRhythm, PatientState } from '../../../engine/patient'
 import type { MonitorNumeric, MonitorTrace } from '../../../engine/monitor/layout'
 import ECGCanvas from './ECGCanvas'
@@ -73,29 +74,6 @@ function numericValue(id: MonitorNumeric['id'], state: PatientState): string {
   }
 }
 
-function isInAlarm(numeric: MonitorNumeric, raw: number | null): boolean {
-  if (numeric.muted || raw === null) return false
-  if (numeric.alarmLo !== null && raw < numeric.alarmLo) return true
-  if (numeric.alarmHi !== null && raw > numeric.alarmHi) return true
-  return false
-}
-
-function numericRaw(id: MonitorNumeric['id'], state: PatientState): number | null {
-  switch (id) {
-    case 'hr':    return state.hr
-    case 'pulse': return state.hr
-    case 'spo2':  return state.spo2
-    case 'rr':    return state.rr
-    case 'temp':  return state.temp
-    case 'etco2': return state.etco2
-    case 'fio2':  return state.fio2 * 100
-    case 'mac':   return state.sevoflurane
-    case 'art':   return state.art ? state.art.map : null
-    case 'cvp':   return state.cvp
-    case 'bis':   return state.bis
-  }
-}
-
 function shouldShowNumeric(numeric: MonitorNumeric, state: PatientState): boolean {
   if (!numeric.enabled) return false
   // Lines that haven't been inserted hide themselves even when enabled, so the
@@ -116,6 +94,7 @@ function shouldShowTrace(trace: MonitorTrace, state: PatientState): boolean {
 const Monitor: FC = () => {
   const { state, scenario, engine } = useSimulation()
   const { layout } = useMonitorLayout()
+  const { byNumeric } = useAlarmsContext()
 
   const visibleTraces = layout.traces.filter(t => shouldShowTrace(t, state))
   const visibleNumerics = layout.numerics.filter(n => shouldShowNumeric(n, state))
@@ -184,12 +163,14 @@ const Monitor: FC = () => {
 
           <aside className="intellivue-numerics">
             {visibleNumerics.map(numeric => {
-              const raw = numericRaw(numeric.id, state)
-              const inAlarm = isInAlarm(numeric, raw)
+              const alarmLevel = byNumeric.get(numeric.id)
+              const alarmClass = alarmLevel
+                ? ` numeric--alarm numeric--alarm-${alarmLevel}`
+                : ''
               return (
                 <div
                   key={numeric.id}
-                  className={`numeric numeric--${numeric.id}${inAlarm ? ' numeric--alarm' : ''}`}
+                  className={`numeric numeric--${numeric.id}${alarmClass}`}
                 >
                   <div className="numeric__meta">
                     <span>{numeric.label}</span>
