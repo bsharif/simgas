@@ -63,6 +63,7 @@ export const DEFAULT_LAYOUT: MonitorLayout = {
     { id: 'pulse', label: 'Pulse', color: '#19c8ff', enabled: true,  alarmLo: null, alarmHi: null, muted: false },
     { id: 'spo2',  label: 'SpO2',  color: '#19c8ff', enabled: true,  alarmLo: 92,   alarmHi: 100,  muted: false },
     { id: 'rr',    label: 'RR',    color: '#eaf4ff', enabled: true,  alarmLo: 8,    alarmHi: 35,   muted: false },
+    { id: 'etco2', label: 'etCO2', color: '#ffd94a', enabled: true,  alarmLo: 4.0,  alarmHi: 6.5,  muted: false },
     { id: 'temp',  label: 'Temp',  color: '#65f36f', enabled: true,  alarmLo: 35.5, alarmHi: 38.5, muted: false },
     { id: 'art',   label: 'ART',   color: '#ff5566', enabled: false, alarmLo: 65,   alarmHi: 180,  muted: false },
     { id: 'cvp',   label: 'CVP',   color: '#9ed5ff', enabled: false, alarmLo: 2,    alarmHi: 16,   muted: false },

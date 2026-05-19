@@ -27,6 +27,7 @@ function Key({
     <button
       className={`intellivue-soft-key${active ? ' intellivue-soft-key--active' : ''}${disabled ? ' intellivue-soft-key--disabled' : ''}`}
       onClick={disabled ? undefined : onClick}
+      aria-disabled={disabled || undefined}
       style={disabled ? { opacity: 0.35, cursor: 'default' } : undefined}
     >
       {children}
