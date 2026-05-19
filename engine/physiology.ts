@@ -23,6 +23,8 @@ export class SimulationEngine {
   private interventions: string[] = []
   private _paused = false
   private _phase: SimulationPhase = 'idle'
+  private lastManualBreathMs = 0
+  private static readonly MANUAL_BREATH_DEBOUNCE_MS = 600
 
   constructor() {
     this.state = createBaselineState()
@@ -126,14 +128,42 @@ export class SimulationEngine {
     this.broadcastState()
   }
 
+  /**
+   * Engage or release the manual bag. Press-down counts as one breath; held
+   * presses don't repeatedly stack. Releasing the bag does not switch the
+   * ventilation mode back to ventilator — the user must do that explicitly
+   * via the Machine panel.
+   */
   setManualVentilation(active: boolean): void {
-    this.state.ventilationMode = 'manual'
-    this.state.manualVentilationActive = active
-    if (active) {
-      this.state.spo2 = Math.min(100, this.state.spo2 + 0.4)
-      this.state.etco2 = Math.min(8, this.state.etco2 + 0.05)
+    if (active && this.state.ventilationMode !== 'manual') {
+      this.state.ventilationMode = 'manual'
     }
+    this.state.manualVentilationActive = active
+
+    if (active) {
+      const now = performance.now()
+      if (now - this.lastManualBreathMs >= SimulationEngine.MANUAL_BREATH_DEBOUNCE_MS) {
+        this.lastManualBreathMs = now
+        this.applyManualBreath()
+      }
+    }
+
     this.broadcastState()
+  }
+
+  /**
+   * One bag squeeze: SpO2 trends toward an FiO2-derived ceiling, ETCO2 trends
+   * toward 5.0 kPa. Small per-breath nudges so several breaths are needed to
+   * fully recover hypoxia/hypercapnia — matches realistic bag ventilation.
+   */
+  private applyManualBreath(): void {
+    const spo2Ceiling = 92 + this.state.fio2 * 8 // fio2 0.21 → 93.7; fio2 1.0 → 100
+    const spo2Gap = spo2Ceiling - this.state.spo2
+    this.state.spo2 = Math.max(0, Math.min(100, this.state.spo2 + spo2Gap * 0.15))
+
+    const etco2Target = 5.0
+    const etco2Gap = etco2Target - this.state.etco2
+    this.state.etco2 = Math.max(0, Math.min(10, this.state.etco2 + etco2Gap * 0.1))
   }
 
   subscribe(cb: StateSubscriber): () => void {
