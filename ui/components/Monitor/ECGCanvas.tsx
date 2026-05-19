@@ -1,18 +1,23 @@
 import { useRef, useCallback, type FC } from 'react'
 import { useCanvasRenderer } from '../../hooks/useCanvasRenderer'
+import type { SimulationEngine } from '../../../engine/physiology'
+import type { PatientState } from '../../../engine/patient'
+
+export type WaveformBufferKey = Extract<
+  keyof PatientState,
+  'ecgBuffer' | 'spo2Buffer' | 'etco2Buffer' | 'respBuffer'
+>
 
 interface WaveformCanvasProps {
-  buffer: Float32Array
-  bufferWritePos: number
+  engine: SimulationEngine
+  bufferKey: WaveformBufferKey
   color: string
-  label: string
+  label?: string
   value?: string
   scale?: number
 }
 
-const ECGCanvas: FC<WaveformCanvasProps> = ({
-  buffer, bufferWritePos, color, label, value, scale = 1
-}) => {
+const ECGCanvas: FC<WaveformCanvasProps> = ({ engine, bufferKey, color, label, value, scale = 1 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const draw = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -55,6 +60,10 @@ const ECGCanvas: FC<WaveformCanvasProps> = ({
     ctx.lineWidth = 2
     ctx.beginPath()
 
+    // Read live engine state at draw time — bypasses the throttled React state.
+    const buffer = engine.state[bufferKey]
+    const bufferWritePos = engine.state.bufferWritePos
+
     const visibleSamples = Math.min(buffer.length, Math.floor(w * 2 * scale))
 
     const midY = h / 2
@@ -83,7 +92,7 @@ const ECGCanvas: FC<WaveformCanvasProps> = ({
       ctx.font = 'bold 22px monospace'
       ctx.fillText(value, 8, 38)
     }
-  }, [buffer, bufferWritePos, color, label, value, scale])
+  }, [engine, bufferKey, color, label, value, scale])
 
   useCanvasRenderer(canvasRef, draw, true)
 

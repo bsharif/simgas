@@ -48,7 +48,7 @@ function SoftKey({ children, active = false }: { children: ReactNode; active?: b
 }
 
 const Monitor: FC = () => {
-  const { state, scenario } = useSimulation()
+  const { state, scenario, engine } = useSimulation()
   const now = new Date()
   const hr = round(state.hr)
   const spo2 = round(state.spo2)
@@ -78,10 +78,9 @@ const Monitor: FC = () => {
                 <span>F</span>
               </div>
               <ECGCanvas
-                buffer={state.ecgBuffer}
-                bufferWritePos={state.bufferWritePos}
+                engine={engine}
+                bufferKey="ecgBuffer"
                 color="#65f36f"
-                label=""
                 scale={1}
               />
               <span className="intellivue-rhythm">Sinus Rhythm</span>
@@ -90,20 +89,18 @@ const Monitor: FC = () => {
             <section className="intellivue-wave intellivue-wave--pleth">
               <div className="intellivue-wave__label intellivue-wave__label--cyan">Pleth</div>
               <SimpleWaveformCanvas
-                buffer={state.spo2Buffer}
-                bufferWritePos={state.bufferWritePos}
+                engine={engine}
+                bufferKey="spo2Buffer"
                 color="#19c8ff"
-                label=""
               />
             </section>
 
             <section className="intellivue-wave intellivue-wave--co2">
               <div className="intellivue-wave__label intellivue-wave__label--yellow">CO2</div>
               <SimpleWaveformCanvas
-                buffer={state.etco2Buffer}
-                bufferWritePos={state.bufferWritePos}
+                engine={engine}
+                bufferKey="etco2Buffer"
                 color="#ffd94a"
-                label=""
               />
               <div className="intellivue-co2-readout">
                 <span>etCO2</span>
@@ -115,10 +112,9 @@ const Monitor: FC = () => {
             <section className="intellivue-wave intellivue-wave--resp">
               <div className="intellivue-wave__label intellivue-wave__label--white">Resp</div>
               <SimpleWaveformCanvas
-                buffer={state.respBuffer}
-                bufferWritePos={state.bufferWritePos}
+                engine={engine}
+                bufferKey="respBuffer"
                 color="#eaf4ff"
-                label=""
               />
             </section>
           </div>

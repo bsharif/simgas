@@ -41,8 +41,18 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const [phase, setPhase] = useState<SimulationPhase>(engine.phase)
 
   useEffect(() => {
+    // Engine broadcasts state at ~60 Hz, but numerics on a real monitor refresh
+    // 2–5×/sec. Throttle React updates to ~5 Hz; canvas components read the
+    // live engine.state directly so waveforms stay at 60 fps independently.
+    const FLUSH_INTERVAL_MS = 200
+    let lastFlushTs = 0
+
     const unsubState = engine.subscribe((s) => {
-      setState({ ...s })
+      const now = performance.now()
+      if (now - lastFlushTs >= FLUSH_INTERVAL_MS) {
+        lastFlushTs = now
+        setState({ ...s })
+      }
     })
 
     const unsubEvent = engine.onEvent((event) => {
@@ -51,6 +61,11 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
 
     const unsubPhase = engine.onPhaseChange((next) => {
       setPhase(next)
+      // Force a final state flush on phase transition so consumers see
+      // terminal values (e.g. the resolved or failed state) without waiting
+      // up to FLUSH_INTERVAL_MS.
+      setState({ ...engine.state })
+      lastFlushTs = performance.now()
     })
 
     return () => {
