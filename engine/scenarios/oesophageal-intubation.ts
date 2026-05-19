@@ -1,4 +1,5 @@
-import type { Scenario } from '../scenario'
+import type { Scenario, ScenarioContext } from '../scenario'
+import type { PatientModifier } from '../interventions'
 
 export const oesophagealIntubation: Scenario = {
   id: 'oesophageal-intubation',
@@ -8,31 +9,39 @@ export const oesophagealIntubation: Scenario = {
   hints: [
     'Watch the capnography trace — is there a plateau?',
     'Check for chest rise and breath sounds',
-    'If ETCO₂ is zero, remove the tube and ventilate with 100% O₂',
+    'If ETCO₂ is zero, extubate, ventilate with 100% O₂, and re-intubate',
   ],
   initialModifiers: {
     etco2Delta: -0.5,
+    // Tube is in the oesophagus — no CO2 exchange.
+    tubePosition: 'oesophagus',
+    baseline: {
+      etco2: 0.2,
+      spo2: 80,
+      hr: 110,
+    },
   },
 
-  check(elapsed, interventions) {
+  check(elapsed: number, _interventions: string[], ctx?: ScenarioContext) {
     const events: string[] = []
-    const mods: Record<string, unknown> = {}
+    const mods: PatientModifier = {}
 
-    const hasReintubated = interventions.includes('re-intubate') || interventions.includes('intubate')
-    const hasO2 = interventions.includes('increase-fio2')
+    // Success is now reading the live state, not the intervention list — the
+    // user must actually have a tube in the trachea (extubate + re-intubate,
+    // or use the dedicated re-intubate intervention which forces trachea).
+    const tubeFixed = ctx?.state.tubePosition === 'trachea'
 
-    if (elapsed < 10) {
-      const p = elapsed / 10
-      mods.etco2 = 4.5 - p * 4.0
-      if (p > 0.5) events.push('⚠ ETCO₂ dropping rapidly — check tube position')
-    } else if (!hasReintubated) {
-      mods.etco2 = 0.2
-      mods.spo2 = Math.max(99 - ((elapsed - 10) / 45) * 15, 80)
-      mods.hr = Math.min(78 + ((elapsed - 10) / 30) * 30, 120)
+    if (elapsed > 5 && elapsed < 6) {
+      events.push('⚠ ETCO₂ dropping rapidly — check tube position')
+    }
 
+    if (!tubeFixed) {
+      // Bradycardia after sustained hypoxia.
       if (elapsed > 40) {
-        mods.hr = Math.max(120 - ((elapsed - 40) / 50) * 70, 40)
-        if (elapsed > 45) events.push('⚠ Bradycardia developing — severe hypoxia')
+        mods.baseline = { hr: 40, spo2: 70, etco2: 0.2 }
+        if (elapsed > 45 && elapsed < 46) {
+          events.push('⚠ Bradycardia developing — severe hypoxia')
+        }
       }
 
       if (elapsed > 90) {
@@ -44,25 +53,19 @@ export const oesophagealIntubation: Scenario = {
         }
       }
     } else {
-      if (elapsed > 20 && hasReintubated) {
-        const recoveryP = Math.min((elapsed - 15) / 15, 1)
-        mods.etco2 = 0.2 + recoveryP * 4.8
-        mods.spo2 = Math.min(85 + recoveryP * 14, 99)
+      // Re-intubated correctly — pull toward normal.
+      mods.baseline = {
+        hr: 90,
+        spo2: 99,
+        etco2: 5.0,
+      }
 
-        if (recoveryP >= 1) {
-          return {
-            modifiers: { hr: 90, spo2: 99, etco2: 5.0 },
-            events: ['✓ ETCO₂ returned — tube correctly placed in trachea'],
-            resolved: true,
-            failed: false,
-          }
-        }
-      } else {
-        mods.etco2 = 0.2
-        mods.spo2 = Math.max(99 - ((elapsed - 10) / 60) * 15, 80)
-
-        if (!hasO2 && elapsed > 15) {
-          mods.fio2 = 0.5
+      if (elapsed > 30) {
+        return {
+          modifiers: { hr: 90, spo2: 99, etco2: 5.0 },
+          events: ['✓ ETCO₂ returned — tube correctly placed in trachea'],
+          resolved: true,
+          failed: false,
         }
       }
     }

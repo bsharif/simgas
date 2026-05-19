@@ -1,18 +1,24 @@
 import { useState, type FC } from 'react'
 import { useSimulation } from '../../context/SimulationContext'
 
+const HINT_THRESHOLDS_SECONDS = [5, 20, 45] as const
+
 const HintsPanel: FC = () => {
-  const { mode, scenario, eventLog } = useSimulation()
-  const [dismissed, setDismissed] = useState(false)
+  const { mode, scenario, elapsedSeconds } = useSimulation()
+  // Track dismissal per scenario id so that picking a new scenario resets it
+  // without needing an effect to clear the flag.
+  const [dismissedFor, setDismissedFor] = useState<string | null>(null)
+  const isDismissed = dismissedFor !== null && dismissedFor === scenario?.id
 
-  if (mode !== 'guided' || !scenario || dismissed) return null
-
-  const elapsedSeconds = eventLog.length
+  if (mode !== 'guided' || !scenario || isDismissed) return null
 
   let hintIndex = -1
-  if (elapsedSeconds > 5) hintIndex = 0
-  if (elapsedSeconds > 15) hintIndex = Math.min(1, scenario.hints.length - 1)
-  if (elapsedSeconds > 30) hintIndex = Math.min(2, scenario.hints.length - 1)
+  for (let i = HINT_THRESHOLDS_SECONDS.length - 1; i >= 0; i--) {
+    if (elapsedSeconds >= HINT_THRESHOLDS_SECONDS[i]) {
+      hintIndex = Math.min(i, scenario.hints.length - 1)
+      break
+    }
+  }
 
   const hint = hintIndex >= 0 ? scenario.hints[hintIndex] : null
   if (!hint) return null
@@ -36,7 +42,7 @@ const HintsPanel: FC = () => {
         </div>
       </div>
       <button
-        onClick={() => setDismissed(true)}
+        onClick={() => setDismissedFor(scenario.id)}
         style={{
           background: 'none',
           border: 'none',

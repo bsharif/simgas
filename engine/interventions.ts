@@ -1,4 +1,4 @@
-import type { PatientState } from './patient'
+import type { PatientState, DriftBaseline, TubePosition } from './patient'
 
 export type InterventionCategory = 'drug' | 'airway' | 'ventilation' | 'procedure'
 
@@ -24,6 +24,14 @@ export interface PatientModifier {
   manualVentilationActive?: boolean
   ecgRhythm?: string
   consciousness?: string
+  tubePosition?: TubePosition
+  /**
+   * Drift targets. When set, the engine smoothly lerps `state.<field>` toward
+   * the corresponding `baseline.<field>` each tick (Phase 1.4). Use this for
+   * scenario-driven physiology trajectories. Immediate fields above (`hr`,
+   * `hrDelta`, etc.) write to `state` directly and sit on top of the drift.
+   */
+  baseline?: DriftBaseline
 }
 
 export interface Intervention {
@@ -34,6 +42,13 @@ export interface Intervention {
   effect: PatientModifier
   durationMs: number
   onsetMs: number
+  /**
+   * Optional gate evaluated by the engine before the effect applies. If it
+   * returns false, the engine fires `preconditionFailureEvent` and does NOT
+   * record the intervention in its history.
+   */
+  precondition?: (state: PatientState) => boolean
+  preconditionFailureEvent?: string
 }
 
 export interface ActiveEffect {
@@ -82,6 +97,61 @@ export function applyModifier(state: PatientState, mod: PatientModifier): void {
   if (mod.manualVentilationActive !== undefined) state.manualVentilationActive = mod.manualVentilationActive
   if (mod.ecgRhythm !== undefined) state.ecgRhythm = mod.ecgRhythm as PatientState['ecgRhythm']
   if (mod.consciousness !== undefined) state.consciousness = mod.consciousness as PatientState['consciousness']
+  if (mod.tubePosition !== undefined) state.tubePosition = mod.tubePosition
+
+  if (mod.baseline) {
+    const dst = state.driftBaseline
+    const src = mod.baseline
+    if (src.hr !== undefined) dst.hr = src.hr
+    if (src.spo2 !== undefined) dst.spo2 = src.spo2
+    if (src.etco2 !== undefined) dst.etco2 = src.etco2
+    if (src.rr !== undefined) dst.rr = src.rr
+    if (src.temp !== undefined) dst.temp = src.temp
+    if (src.nibp) {
+      if (!dst.nibp) dst.nibp = {}
+      if (src.nibp.sys !== undefined) dst.nibp.sys = src.nibp.sys
+      if (src.nibp.dia !== undefined) dst.nibp.dia = src.nibp.dia
+      if (src.nibp.map !== undefined) dst.nibp.map = src.nibp.map
+    }
+  }
+}
+
+/**
+ * Lerp each vital toward its drift target. Constant rates per second so
+ * scenario phases reach their targets in predictable times (e.g. HR target 130
+ * from baseline 78 with rate 1.0 BPM/sec reaches target in ~52s).
+ */
+const DRIFT_RATE_PER_SEC = {
+  hr: 1.0,        // BPM/sec
+  spo2: 0.5,      // %/sec
+  etco2: 0.05,    // kPa/sec
+  rr: 0.5,        // breaths/min/sec
+  temp: 0.02,     // °C/sec
+  nibpSys: 1.0,   // mmHg/sec
+  nibpDia: 0.7,   // mmHg/sec
+} as const
+
+function driftToward(current: number, target: number, ratePerSec: number, dtSec: number): number {
+  const gap = target - current
+  const maxStep = ratePerSec * dtSec
+  if (Math.abs(gap) <= maxStep) return target
+  return current + Math.sign(gap) * maxStep
+}
+
+export function applyDrift(state: PatientState, dtSec: number): void {
+  const b = state.driftBaseline
+  if (b.hr !== undefined) state.hr = driftToward(state.hr, b.hr, DRIFT_RATE_PER_SEC.hr, dtSec)
+  if (b.spo2 !== undefined) state.spo2 = driftToward(state.spo2, b.spo2, DRIFT_RATE_PER_SEC.spo2, dtSec)
+  if (b.etco2 !== undefined) state.etco2 = driftToward(state.etco2, b.etco2, DRIFT_RATE_PER_SEC.etco2, dtSec)
+  if (b.rr !== undefined) state.rr = driftToward(state.rr, b.rr, DRIFT_RATE_PER_SEC.rr, dtSec)
+  if (b.temp !== undefined) state.temp = driftToward(state.temp, b.temp, DRIFT_RATE_PER_SEC.temp, dtSec)
+  if (b.nibp) {
+    if (b.nibp.sys !== undefined) state.nibp.sys = driftToward(state.nibp.sys, b.nibp.sys, DRIFT_RATE_PER_SEC.nibpSys, dtSec)
+    if (b.nibp.dia !== undefined) state.nibp.dia = driftToward(state.nibp.dia, b.nibp.dia, DRIFT_RATE_PER_SEC.nibpDia, dtSec)
+    state.nibp.map = b.nibp.map !== undefined
+      ? driftToward(state.nibp.map, b.nibp.map, DRIFT_RATE_PER_SEC.nibpSys, dtSec)
+      : Math.round(state.nibp.dia + (state.nibp.sys - state.nibp.dia) / 3)
+  }
 }
 
 export function combineWithBaseline(mod: PatientModifier): PatientModifier {
@@ -148,18 +218,31 @@ export const INTERVENTIONS: Intervention[] = [
     label: 'Intubate',
     category: 'airway',
     description: 'Endotracheal intubation',
-    effect: {},
+    effect: { tubePosition: 'trachea' },
     durationMs: 0,
     onsetMs: 0,
+    precondition: (s) => s.tubePosition === 'none',
+    preconditionFailureEvent: '⚠ Tube already in place — extubate first',
   },
   {
     id: 're-intubate',
     label: 'Re-intubate',
     category: 'airway',
-    description: 'Re-attempt endotracheal intubation',
-    effect: {},
+    description: 'Re-attempt endotracheal intubation (extubates first if needed)',
+    effect: { tubePosition: 'trachea' },
     durationMs: 0,
     onsetMs: 0,
+  },
+  {
+    id: 'extubate',
+    label: 'Extubate',
+    category: 'airway',
+    description: 'Remove the endotracheal tube',
+    effect: { tubePosition: 'none' },
+    durationMs: 0,
+    onsetMs: 0,
+    precondition: (s) => s.tubePosition !== 'none',
+    preconditionFailureEvent: '⚠ No tube to extubate',
   },
   {
     id: 'jaw-thrust',

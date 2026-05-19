@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
-import { SimulationEngine } from '../../engine/physiology'
+import { SimulationEngine, type SimulationPhase } from '../../engine/physiology'
 import { SCENARIO_MAP, ALL_SCENARIOS } from '../../engine/scenarios/index'
 import { INTERVENTION_MAP } from '../../engine/interventions'
 import type { PatientState } from '../../engine/patient'
@@ -22,7 +22,11 @@ interface SimulationContextValue {
   paused: boolean
   scenario: Scenario | null
   scenarios: Scenario[]
+  phase: SimulationPhase
+  elapsedSeconds: number
+  /** @deprecated read `phase === 'resolved'` instead */
   resolved: boolean
+  /** @deprecated read `phase === 'failed'` instead */
   failed: boolean
 }
 
@@ -34,24 +38,43 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const [eventLog, setEventLog] = useState<string[]>([])
   const [mode, setMode] = useState<Mode>('guided')
   const [scenario, setScenario] = useState<Scenario | null>(null)
-  const [resolved, setResolved] = useState(false)
-  const [failed, setFailed] = useState(false)
   const [paused, setPaused] = useState(false)
+  const [phase, setPhase] = useState<SimulationPhase>(engine.phase)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
   useEffect(() => {
+    // Engine broadcasts state at ~60 Hz, but numerics on a real monitor refresh
+    // 2–5×/sec. Throttle React updates to ~5 Hz; canvas components read the
+    // live engine.state directly so waveforms stay at 60 fps independently.
+    const FLUSH_INTERVAL_MS = 200
+    let lastFlushTs = 0
+
     const unsubState = engine.subscribe((s) => {
-      setState({ ...s })
+      const now = performance.now()
+      if (now - lastFlushTs >= FLUSH_INTERVAL_MS) {
+        lastFlushTs = now
+        setState({ ...s })
+        setElapsedSeconds(engine.elapsedSeconds)
+      }
     })
 
     const unsubEvent = engine.onEvent((event) => {
       setEventLog(prev => [...prev, event])
-      if (event.startsWith('✓ Scenario complete')) setResolved(true)
-      if (event.startsWith('✗ Scenario failed')) setFailed(true)
+    })
+
+    const unsubPhase = engine.onPhaseChange((next) => {
+      setPhase(next)
+      // Force a final state flush on phase transition so consumers see
+      // terminal values (e.g. the resolved or failed state) without waiting
+      // up to FLUSH_INTERVAL_MS.
+      setState({ ...engine.state })
+      lastFlushTs = performance.now()
     })
 
     return () => {
       unsubState()
       unsubEvent()
+      unsubPhase()
       engine.stop()
     }
   }, [engine])
@@ -61,8 +84,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     if (!s) return
     setScenario(s)
     setEventLog([])
-    setResolved(false)
-    setFailed(false)
+    setPaused(false)
+    setElapsedSeconds(0)
     engine.start(s)
   }, [engine])
 
@@ -101,8 +124,10 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         paused,
         scenario,
         scenarios: ALL_SCENARIOS,
-        resolved,
-        failed,
+        phase,
+        elapsedSeconds,
+        resolved: phase === 'resolved',
+        failed: phase === 'failed',
       }}
     >
       {children}
