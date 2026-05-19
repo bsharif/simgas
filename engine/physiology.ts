@@ -1,6 +1,6 @@
 import { type PatientState, createBaselineState, BUFFER_SIZE } from './patient'
 import type { Scenario } from './scenario'
-import { type Intervention, type ActiveEffect, applyModifier, createActiveEffect } from './interventions'
+import { type Intervention, type ActiveEffect, applyModifier, applyDrift, createActiveEffect } from './interventions'
 import { generateECGSample, generateSpO2Sample, generateETCO2Sample, generateRespSample, SAMPLES_PER_TICK } from './waveforms'
 
 export type SimulationPhase = 'idle' | 'running' | 'resolved' | 'failed'
@@ -213,6 +213,10 @@ export class SimulationEngine {
         scenarioEnded = 'failed'
       }
     }
+
+    // Lerp vitals toward scenario-set targets (Phase 1.4). Drug deltas applied
+    // below sit on top of this drift instead of being overwritten by it.
+    applyDrift(this.state, deltaMs / 1000)
 
     const maxEffects = 20
     for (let i = 0; i < this.activeEffects.length && i < maxEffects; i++) {

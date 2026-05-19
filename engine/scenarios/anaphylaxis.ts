@@ -1,5 +1,11 @@
 import type { Scenario } from '../scenario'
+import type { PatientModifier } from '../interventions'
 
+/**
+ * Anaphylaxis scenario. Sets drift baselines instead of writing absolute vitals
+ * every tick — so when the user gives adrenaline (hrDelta + nibpDelta), the
+ * drug bump persists on top of the underlying physiology trajectory.
+ */
 export const anaphylaxis: Scenario = {
   id: 'anaphylaxis',
   label: 'Anaphylaxis',
@@ -10,43 +16,59 @@ export const anaphylaxis: Scenario = {
     'Give adrenaline early — it is the first-line treatment',
     'Fluids and high-flow oxygen are also key',
   ],
+  // Snap initial vitals; drift kicks in from there.
   initialModifiers: {
     hr: 120,
     spo2: 92,
     nibpDelta: { sys: -50, map: -35 },
     etco2Delta: -0.5,
+    baseline: {
+      hr: 130,
+      spo2: 88,
+      nibp: { sys: 70, dia: 50, map: 58 },
+      etco2: 4.0,
+    },
   },
 
   check(elapsed, interventions) {
     const events: string[] = []
-    const mods: Record<string, unknown> = {}
+    const mods: PatientModifier = {}
 
     const hasAdrenaline = interventions.includes('adrenaline-1') || interventions.includes('adrenaline-10')
     const hasFluids = interventions.includes('fluid-bolus')
     const hasO2 = interventions.includes('increase-fio2')
 
     if (elapsed < 30) {
-      const progress = elapsed / 30
-      const sys = 70 - progress * 50
-      const map = 58 - progress * 35
-      mods.nibp = { sys, dia: 50, map }
-      mods.hr = Math.min(78 + progress * 45, 130)
-      mods.spo2 = Math.max(99 - progress * 8, 88)
-      if (elapsed > 10) events.push('⚠ HR rising, BP falling — possible anaphylaxis')
+      if (elapsed > 10 && elapsed < 11) {
+        events.push('⚠ HR rising, BP falling — possible anaphylaxis')
+      }
+      // Onset baseline already set in initialModifiers; nothing to update.
     } else if (elapsed < 90) {
       if (!hasAdrenaline) {
-        const p = (elapsed - 30) / 60
-        mods.nibp = { sys: 70 - p * 30, dia: 45 - p * 10, map: 58 - p * 20 }
-        mods.hr = Math.min(130 + p * 20, 155)
-        mods.spo2 = Math.max(88 - p * 15, 70)
-        if (p > 0.3) events.push('⚠ Severe hypotension — risk of cardiac arrest')
+        // Worsen — push baseline to severe values; drift handles the trajectory.
+        mods.baseline = {
+          hr: 155,
+          spo2: 70,
+          nibp: { sys: 40, dia: 30, map: 33 },
+          etco2: 3.0,
+        }
+        if (elapsed > 60 && elapsed < 61) {
+          events.push('⚠ Severe hypotension — risk of cardiac arrest')
+        }
       } else {
-        const p = Math.min((elapsed - 30) / 60, 1)
-        mods.nibp = { sys: 70 + p * 60, dia: 45 + p * 30, map: 58 + p * 40 }
-        mods.hr = Math.max(130 - p * 40, 80)
-        mods.spo2 = Math.min(88 + p * 12, 100)
-        if (!hasO2 && p > 0.5) events.push('Consider high-flow oxygen')
-        if (!hasFluids && p > 0.7) events.push('Consider IV fluid bolus')
+        // Treated — pull baseline toward normal.
+        mods.baseline = {
+          hr: 85,
+          spo2: 99,
+          nibp: { sys: 125, dia: 78, map: 94 },
+          etco2: 5.0,
+        }
+        if (!hasO2 && elapsed > 60 && elapsed < 61) {
+          events.push('Consider high-flow oxygen')
+        }
+        if (!hasFluids && elapsed > 75 && elapsed < 76) {
+          events.push('Consider IV fluid bolus')
+        }
       }
     } else {
       if (!hasAdrenaline) {
@@ -57,12 +79,15 @@ export const anaphylaxis: Scenario = {
           failed: true,
         }
       }
-      const p = Math.min((elapsed - 90) / 60, 1)
-      mods.nibp = { sys: 110 + p * 20, dia: 70 + p * 10, map: 82 + p * 15 }
-      mods.hr = Math.max(85 - p * 10, 75)
-      mods.spo2 = Math.min(96 + p * 4, 100)
+      // Final stabilisation — keep recovery baseline; check resolution.
+      mods.baseline = {
+        hr: 78,
+        spo2: 100,
+        nibp: { sys: 120, dia: 80, map: 93 },
+        etco2: 5.0,
+      }
 
-      if (p >= 1) {
+      if (elapsed > 150) {
         return {
           modifiers: { hr: 78, spo2: 99, nibp: { sys: 120, dia: 80, map: 93 } },
           events: ['✓ Patient stabilised after anaphylaxis treatment'],

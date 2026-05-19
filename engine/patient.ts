@@ -7,6 +7,21 @@ export interface NibpReading {
   map: number
 }
 
+/**
+ * Drift targets — the "untreated trajectory" the scenario wants vitals to
+ * approach. The engine smoothly lerps each `state.<field>` toward
+ * `driftBaseline.<field>` every tick. Drug deltas write to state directly so
+ * they persist on top of the drift (Phase 1.4).
+ */
+export interface DriftBaseline {
+  hr?: number
+  spo2?: number
+  nibp?: { sys?: number; dia?: number; map?: number }
+  etco2?: number
+  rr?: number
+  temp?: number
+}
+
 export interface PatientState {
   hr: number
   spo2: number
@@ -28,6 +43,7 @@ export interface PatientState {
   etco2Buffer: Float32Array
   respBuffer: Float32Array
   bufferWritePos: number
+  driftBaseline: DriftBaseline
 }
 
 export const BUFFER_SIZE = 2048
@@ -63,5 +79,6 @@ export function createBaselineState(): PatientState {
     etco2Buffer: new Float32Array(BUFFER_SIZE),
     respBuffer: new Float32Array(BUFFER_SIZE),
     bufferWritePos: 0,
+    driftBaseline: {},
   }
 }
