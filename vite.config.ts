@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
-    include: ['engine/**/*.test.ts'],
+    // engine/ holds the simulation logic; ui/ tests must be node-environment
+    // pure functions (no DOM). Components are smoke-tested manually for now.
+    include: ['engine/**/*.test.ts', 'ui/**/*.test.ts'],
   },
 })

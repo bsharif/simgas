@@ -17,6 +17,8 @@ export interface Scenario {
   difficulty: 'easy' | 'medium' | 'hard'
   hints: string[]
   initialModifiers: PatientModifier
+  /** Markdown body from the scenario file, used by the post-run debrief view. */
+  debriefBody?: string
   check: (
     elapsed: number,
     interventions: string[],
