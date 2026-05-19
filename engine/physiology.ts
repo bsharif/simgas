@@ -1,7 +1,7 @@
 import { type PatientState, createBaselineState, BUFFER_SIZE } from './patient'
 import type { Scenario } from './scenario'
 import { type Intervention, type ActiveEffect, applyModifier, applyDrift, createActiveEffect } from './interventions'
-import { generateECGSample, generateSpO2Sample, generateETCO2Sample, generateRespSample, SAMPLES_PER_TICK } from './waveforms'
+import { generateECGSample, generateSpO2Sample, generateETCO2Sample, generateRespSample, generateArterialSample, SAMPLES_PER_TICK } from './waveforms'
 
 export type SimulationPhase = 'idle' | 'running' | 'resolved' | 'failed'
 
@@ -259,11 +259,15 @@ export class SimulationEngine {
       const spo2Val = generateSpO2Sample(t, this.state.hr, this.state.spo2)
       const etco2Val = generateETCO2Sample(t, this.state.rr, this.state.etco2, false)
       const respVal = generateRespSample(t, this.state.rr, this.state.manualVentilationActive)
+      const artVal = this.state.art
+        ? generateArterialSample(t, this.state.hr, this.state.art.sys, this.state.art.dia)
+        : 0
 
       this.state.ecgBuffer[this.state.bufferWritePos] = ecgVal
       this.state.spo2Buffer[this.state.bufferWritePos] = spo2Val
       this.state.etco2Buffer[this.state.bufferWritePos] = etco2Val
       this.state.respBuffer[this.state.bufferWritePos] = respVal
+      this.state.artBuffer[this.state.bufferWritePos] = artVal
       this.state.bufferWritePos = (this.state.bufferWritePos + 1) % BUFFER_SIZE
     }
 

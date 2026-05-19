@@ -116,6 +116,47 @@ export function generateETCO2Sample(
   return plateauValue * (1 - smoothDrop)
 }
 
+/**
+ * Synthetic arterial line waveform: sharp upstroke, dicrotic notch on the
+ * downstroke, exponential decay to diastolic. Distinct envelope from pleth
+ * (no respiratory swing) and from ECG (no negative deflections).
+ *
+ * Returns a value in approximately [0, 1] — the canvas scales it. The
+ * relative amplitude is modulated by (sys - dia) so a narrow pulse pressure
+ * (e.g. tamponade, hypovolaemia) looks visually different from a wide one.
+ */
+export function generateArterialSample(
+  time: number,
+  hr: number,
+  sys: number,
+  dia: number,
+): number {
+  const rr = 60 / Math.max(hr, 1)
+  const t = (time % rr) / rr // 0..1 within a beat
+
+  // Sharp systolic upstroke from t=0 to t=0.10
+  let v: number
+  if (t < 0.10) {
+    v = Math.pow(t / 0.10, 2)
+  } else if (t < 0.30) {
+    // Decay from peak through the dicrotic notch
+    const p = (t - 0.10) / 0.20
+    // small notch at p ~= 0.6
+    const notch = Math.exp(-((p - 0.55) ** 2) / 0.005) * -0.12
+    v = (1 - p) * 0.8 + 0.2 + notch
+  } else {
+    // Slow exponential decay back toward diastolic
+    const p = (t - 0.30) / 0.70
+    v = 0.2 * Math.exp(-p * 2.5)
+  }
+
+  // Scale by pulse pressure normalised against a "wide" baseline of ~40 mmHg.
+  const pulsePressure = Math.max(0, sys - dia)
+  const amplitude = Math.min(1, pulsePressure / 50)
+
+  return v * amplitude
+}
+
 export function generateRespSample(
   time: number,
   rr: number,

@@ -30,10 +30,23 @@ export interface DriftBaseline {
   temp?: number
 }
 
+export interface ArterialReading {
+  sys: number
+  dia: number
+  map: number
+}
+
 export interface PatientState {
   hr: number
   spo2: number
   nibp: NibpReading
+  /**
+   * Invasive arterial pressure reading. Null until an arterial line is
+   * inserted via the `arterial-line` intervention.
+   */
+  art: ArterialReading | null
+  cvp: number | null
+  bis: number | null
   etco2: number
   rr: number
   temp: number
@@ -51,9 +64,18 @@ export interface PatientState {
   spo2Buffer: Float32Array
   etco2Buffer: Float32Array
   respBuffer: Float32Array
+  artBuffer: Float32Array
   bufferWritePos: number
   driftBaseline: DriftBaseline
 }
+
+/** Keys on PatientState that hold a waveform ring buffer. */
+export type WaveformBufferKey =
+  | 'ecgBuffer'
+  | 'spo2Buffer'
+  | 'etco2Buffer'
+  | 'respBuffer'
+  | 'artBuffer'
 
 export const BUFFER_SIZE = 2048
 
@@ -88,7 +110,11 @@ export function createBaselineState(): PatientState {
     spo2Buffer: new Float32Array(BUFFER_SIZE),
     etco2Buffer: new Float32Array(BUFFER_SIZE),
     respBuffer: new Float32Array(BUFFER_SIZE),
+    artBuffer: new Float32Array(BUFFER_SIZE),
     bufferWritePos: 0,
+    art: null,
+    cvp: null,
+    bis: null,
     driftBaseline: {},
   }
 }

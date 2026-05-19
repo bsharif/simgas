@@ -1,6 +1,8 @@
 import { useMemo, type FC, type ReactNode } from 'react'
 import { useSimulation } from '../../context/SimulationContext'
-import type { EcgRhythm } from '../../../engine/patient'
+import { useMonitorLayout } from '../../context/MonitorLayoutContext'
+import type { EcgRhythm, PatientState } from '../../../engine/patient'
+import type { MonitorNumeric, MonitorTrace } from '../../../engine/monitor/layout'
 import ECGCanvas from './ECGCanvas'
 import SimpleWaveformCanvas from './SimpleWaveformCanvas'
 
@@ -35,15 +37,6 @@ const RHYTHM_LABELS: Record<EcgRhythm, string> = {
   asystole: 'Asystole',
 }
 
-// Default alarm thresholds (Phase 3 will lift these into MonitorLayout config).
-const ALARM_THRESHOLDS = {
-  hr: { lo: 50, hi: 120 },
-  spo2: { lo: 92, hi: 100 },
-  rr: { lo: 8, hi: 35 },
-  temp: { lo: 35.5, hi: 38.5 },
-  nibp: { sysLo: 90, sysHi: 160 },
-} as const
-
 function buildBpHistory(sys: number, dia: number, anchorMs: number): Array<[string, string]> {
   return Array.from({ length: 6 }, (_, i) => {
     const minutesBack = (5 - i) * 5
@@ -64,23 +57,79 @@ function SoftKey({ children, active = false }: { children: ReactNode; active?: b
   )
 }
 
+function numericValue(id: MonitorNumeric['id'], state: PatientState): string {
+  switch (id) {
+    case 'hr':    return String(round(state.hr))
+    case 'pulse': return String(round(state.hr))
+    case 'spo2':  return String(round(state.spo2))
+    case 'rr':    return String(round(state.rr))
+    case 'temp':  return Math.max(0, state.temp).toFixed(1)
+    case 'etco2': return Math.max(0, state.etco2).toFixed(1)
+    case 'fio2':  return `${Math.round(state.fio2 * 100)}`
+    case 'mac':   return state.sevoflurane.toFixed(1)
+    case 'art':   return state.art ? `${round(state.art.sys)}/${round(state.art.dia)}` : '—'
+    case 'cvp':   return state.cvp !== null ? String(round(state.cvp)) : '—'
+    case 'bis':   return state.bis !== null ? String(round(state.bis)) : '—'
+  }
+}
+
+function isInAlarm(numeric: MonitorNumeric, raw: number | null): boolean {
+  if (numeric.muted || raw === null) return false
+  if (numeric.alarmLo !== null && raw < numeric.alarmLo) return true
+  if (numeric.alarmHi !== null && raw > numeric.alarmHi) return true
+  return false
+}
+
+function numericRaw(id: MonitorNumeric['id'], state: PatientState): number | null {
+  switch (id) {
+    case 'hr':    return state.hr
+    case 'pulse': return state.hr
+    case 'spo2':  return state.spo2
+    case 'rr':    return state.rr
+    case 'temp':  return state.temp
+    case 'etco2': return state.etco2
+    case 'fio2':  return state.fio2 * 100
+    case 'mac':   return state.sevoflurane
+    case 'art':   return state.art ? state.art.map : null
+    case 'cvp':   return state.cvp
+    case 'bis':   return state.bis
+  }
+}
+
+function shouldShowNumeric(numeric: MonitorNumeric, state: PatientState): boolean {
+  if (!numeric.enabled) return false
+  // Lines that haven't been inserted hide themselves even when enabled, so the
+  // pre-insertion layout doesn't show "—" tiles for every invasive parameter.
+  if (numeric.id === 'art' && state.art === null) return false
+  if (numeric.id === 'cvp' && state.cvp === null) return false
+  if (numeric.id === 'bis' && state.bis === null) return false
+  return true
+}
+
+function shouldShowTrace(trace: MonitorTrace, state: PatientState): boolean {
+  if (!trace.enabled) return false
+  // ART trace hides itself until an arterial line is inserted.
+  if (trace.id === 'art' && state.art === null) return false
+  return true
+}
+
 const Monitor: FC = () => {
   const { state, scenario, engine } = useSimulation()
+  const { layout } = useMonitorLayout()
 
-  const hr = round(state.hr)
-  const spo2 = round(state.spo2)
+  const visibleTraces = layout.traces.filter(t => shouldShowTrace(t, state))
+  const visibleNumerics = layout.numerics.filter(n => shouldShowNumeric(n, state))
+
   const nibpSys = round(state.nibp.sys)
   const nibpDia = round(state.nibp.dia)
   const nibpMap = round(state.nibp.map)
-  const rr = round(state.rr)
-  const temp = Math.max(0, state.temp).toFixed(1)
-  const etco2 = Math.max(0, state.etco2).toFixed(1)
+  const hrForChrome = round(state.hr)
   const rhythmLabel = RHYTHM_LABELS[state.ecgRhythm]
+  const etco2 = Math.max(0, state.etco2).toFixed(1)
 
   // Anchor the fake BP history + clock display to the current minute so the
-  // trace only refreshes when the minute rolls over, not on every ~5 Hz
-  // re-render. TODO(Phase 3): replace with real NBP cycle history from the
-  // engine so we don't need this anchor at all.
+  // trace only refreshes when the minute rolls over.
+  // TODO(Phase 4): replace with real NBP cycle history from the engine.
   // eslint-disable-next-line react-hooks/purity
   const minuteAnchor = Math.floor(Date.now() / 60_000) * 60_000
 
@@ -103,95 +152,54 @@ const Monitor: FC = () => {
 
         <div className="intellivue-main">
           <div className="intellivue-wave-stack">
-            <section className="intellivue-wave intellivue-wave--ecg">
-              <div className="intellivue-wave__label">
-                <span>II</span>
-                <span>(0.2)</span>
-                <span>F</span>
-              </div>
-              <ECGCanvas
-                engine={engine}
-                bufferKey="ecgBuffer"
-                color="#65f36f"
-                scale={1}
-              />
-              <span className="intellivue-rhythm">{rhythmLabel}</span>
-            </section>
-
-            <section className="intellivue-wave intellivue-wave--pleth">
-              <div className="intellivue-wave__label intellivue-wave__label--cyan">Pleth</div>
-              <SimpleWaveformCanvas
-                engine={engine}
-                bufferKey="spo2Buffer"
-                color="#19c8ff"
-              />
-            </section>
-
-            <section className="intellivue-wave intellivue-wave--co2">
-              <div className="intellivue-wave__label intellivue-wave__label--yellow">CO2</div>
-              <SimpleWaveformCanvas
-                engine={engine}
-                bufferKey="etco2Buffer"
-                color="#ffd94a"
-              />
-              <div className="intellivue-co2-readout">
-                <span>etCO2</span>
-                <strong>{etco2}</strong>
-                <span>kPa</span>
-              </div>
-            </section>
-
-            <section className="intellivue-wave intellivue-wave--resp">
-              <div className="intellivue-wave__label intellivue-wave__label--white">Resp</div>
-              <SimpleWaveformCanvas
-                engine={engine}
-                bufferKey="respBuffer"
-                color="#eaf4ff"
-              />
-            </section>
+            {visibleTraces.map(trace => (
+              <section
+                key={trace.id}
+                className={`intellivue-wave intellivue-wave--${trace.id}`}
+              >
+                <div
+                  className={`intellivue-wave__label`}
+                  style={{ color: trace.color }}
+                >
+                  {trace.label}
+                </div>
+                {trace.rendererStyle === 'ecg' ? (
+                  <ECGCanvas engine={engine} bufferKey={trace.bufferKey} color={trace.color} />
+                ) : (
+                  <SimpleWaveformCanvas engine={engine} bufferKey={trace.bufferKey} color={trace.color} />
+                )}
+                {trace.id === 'ecg-ii' && (
+                  <span className="intellivue-rhythm">{rhythmLabel}</span>
+                )}
+                {trace.id === 'co2' && (
+                  <div className="intellivue-co2-readout">
+                    <span>etCO2</span>
+                    <strong>{etco2}</strong>
+                    <span>kPa</span>
+                  </div>
+                )}
+              </section>
+            ))}
           </div>
 
           <aside className="intellivue-numerics">
-            <div className="numeric numeric--hr">
-              <div className="numeric__meta">
-                <span>HR</span>
-                <small>{ALARM_THRESHOLDS.hr.hi}</small>
-                <small>{ALARM_THRESHOLDS.hr.lo}</small>
-              </div>
-              <strong>{hr}</strong>
-            </div>
-
-            <div className="numeric numeric--pulse">
-              <span>Pulse</span>
-              <strong>{hr}</strong>
-              <small>PVC 0</small>
-              <small>ST-II 0.2</small>
-            </div>
-
-            <div className="numeric numeric--spo2">
-              <div className="numeric__meta">
-                <span>SpO2</span>
-                <small>{ALARM_THRESHOLDS.spo2.hi}</small>
-                <small>{ALARM_THRESHOLDS.spo2.lo}</small>
-              </div>
-              <strong>{spo2}</strong>
-            </div>
-
-            <div className="numeric numeric--rr">
-              <div className="numeric__meta">
-                <span>RR</span>
-                <small>{ALARM_THRESHOLDS.rr.hi}</small>
-                <small>{ALARM_THRESHOLDS.rr.lo}</small>
-              </div>
-              <strong>{rr}</strong>
-            </div>
-
-            <div className="numeric numeric--temp">
-              <span>Temp</span>
-              <small>{ALARM_THRESHOLDS.temp.hi.toFixed(1)}</small>
-              <small>{ALARM_THRESHOLDS.temp.lo.toFixed(1)}</small>
-              <strong>{temp}</strong>
-            </div>
+            {visibleNumerics.map(numeric => {
+              const raw = numericRaw(numeric.id, state)
+              const inAlarm = isInAlarm(numeric, raw)
+              return (
+                <div
+                  key={numeric.id}
+                  className={`numeric numeric--${numeric.id}${inAlarm ? ' numeric--alarm' : ''}`}
+                >
+                  <div className="numeric__meta">
+                    <span>{numeric.label}</span>
+                    {numeric.alarmHi !== null && <small>{numeric.alarmHi}</small>}
+                    {numeric.alarmLo !== null && <small>{numeric.alarmLo}</small>}
+                  </div>
+                  <strong style={{ color: numeric.color }}>{numericValue(numeric.id, state)}</strong>
+                </div>
+              )
+            })}
           </aside>
         </div>
 
@@ -199,9 +207,9 @@ const Monitor: FC = () => {
           <section className="nbp-panel">
             <div className="nbp-panel__labels">
               <span>NBP</span>
-              <small>Pulse {hr}</small>
-              <small>Sys {ALARM_THRESHOLDS.nibp.sysHi}</small>
-              <small>{ALARM_THRESHOLDS.nibp.sysLo}</small>
+              <small>Pulse {hrForChrome}</small>
+              <small>Sys 160</small>
+              <small>90</small>
             </div>
             <strong>{nibpSys}/{nibpDia}</strong>
             <em>({nibpMap})</em>

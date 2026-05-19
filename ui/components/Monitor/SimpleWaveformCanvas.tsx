@@ -1,7 +1,7 @@
 import { useRef, useCallback, type FC } from 'react'
 import { useCanvasRenderer } from '../../hooks/useCanvasRenderer'
 import type { SimulationEngine } from '../../../engine/physiology'
-import type { WaveformBufferKey } from './ECGCanvas'
+import type { WaveformBufferKey } from '../../../engine/patient'
 
 interface SimpleWaveformProps {
   engine: SimulationEngine
