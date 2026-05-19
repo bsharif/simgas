@@ -1,4 +1,4 @@
-import type { PatientState, DriftBaseline, TubePosition } from './patient'
+import type { PatientState, DriftBaseline, TubePosition, ArterialReading } from './patient'
 
 export type InterventionCategory = 'drug' | 'airway' | 'ventilation' | 'procedure'
 
@@ -25,6 +25,10 @@ export interface PatientModifier {
   ecgRhythm?: string
   consciousness?: string
   tubePosition?: TubePosition
+  /** Insert / remove invasive monitoring. null clears the reading. */
+  art?: ArterialReading | null
+  cvp?: number | null
+  bis?: number | null
   /**
    * Drift targets. When set, the engine smoothly lerps `state.<field>` toward
    * the corresponding `baseline.<field>` each tick (Phase 1.4). Use this for
@@ -49,6 +53,16 @@ export interface Intervention {
    */
   precondition?: (state: PatientState) => boolean
   preconditionFailureEvent?: string
+  /**
+   * Minimum interval between successive applications of this intervention.
+   * Engine blocks rapid re-clicks and fires a cooldown event.
+   */
+  cooldownMs?: number
+  /**
+   * Maximum total applications allowed in a single scenario run.
+   * Engine blocks further attempts after this.
+   */
+  maxDoses?: number
 }
 
 export interface ActiveEffect {
@@ -98,6 +112,9 @@ export function applyModifier(state: PatientState, mod: PatientModifier): void {
   if (mod.ecgRhythm !== undefined) state.ecgRhythm = mod.ecgRhythm as PatientState['ecgRhythm']
   if (mod.consciousness !== undefined) state.consciousness = mod.consciousness as PatientState['consciousness']
   if (mod.tubePosition !== undefined) state.tubePosition = mod.tubePosition
+  if (mod.art !== undefined) state.art = mod.art === null ? null : { ...mod.art }
+  if (mod.cvp !== undefined) state.cvp = mod.cvp
+  if (mod.bis !== undefined) state.bis = mod.bis
 
   if (mod.baseline) {
     const dst = state.driftBaseline
@@ -167,6 +184,7 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { hrDelta: 15, nibpDelta: { sys: 15, map: 10 } },
     durationMs: 120000,
     onsetMs: 5000,
+    cooldownMs: 10000,
   },
   {
     id: 'adrenaline-10',
@@ -176,6 +194,7 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { hrDelta: 30, nibpDelta: { sys: 30, map: 20 } },
     durationMs: 180000,
     onsetMs: 5000,
+    cooldownMs: 15000,
   },
   {
     id: 'metaraminol',
@@ -185,6 +204,7 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { nibpDelta: { sys: 25, map: 15 } },
     durationMs: 120000,
     onsetMs: 3000,
+    cooldownMs: 8000,
   },
   {
     id: 'ephedrine',
@@ -194,6 +214,7 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { hrDelta: 20, nibpDelta: { sys: 20, map: 12 } },
     durationMs: 90000,
     onsetMs: 3000,
+    cooldownMs: 10000,
   },
   {
     id: 'propofol',
@@ -203,6 +224,7 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { hrDelta: -5, nibpDelta: { sys: -15, map: -10 }, consciousness: 'unconscious' },
     durationMs: 300000,
     onsetMs: 2000,
+    cooldownMs: 5000,
   },
   {
     id: 'dantrolene',
@@ -212,6 +234,8 @@ export const INTERVENTIONS: Intervention[] = [
     effect: { tempDelta: -0.5 },
     durationMs: 300000,
     onsetMs: 60000,
+    cooldownMs: 30000,
+    maxDoses: 5,
   },
   {
     id: 'intubate',
@@ -360,6 +384,39 @@ export const INTERVENTIONS: Intervention[] = [
     effect: {},
     durationMs: 0,
     onsetMs: 0,
+  },
+  {
+    id: 'arterial-line',
+    label: 'Insert Art Line',
+    category: 'procedure',
+    description: 'Insert radial arterial line for invasive BP monitoring',
+    effect: { art: { sys: 125, dia: 78, map: 94 } },
+    durationMs: 0,
+    onsetMs: 0,
+    precondition: (s) => s.art === null,
+    preconditionFailureEvent: '⚠ Arterial line already in place',
+  },
+  {
+    id: 'cvp-line',
+    label: 'Insert CVP Line',
+    category: 'procedure',
+    description: 'Insert central venous catheter',
+    effect: { cvp: 8 },
+    durationMs: 0,
+    onsetMs: 0,
+    precondition: (s) => s.cvp === null,
+    preconditionFailureEvent: '⚠ Central line already in place',
+  },
+  {
+    id: 'bis-monitor',
+    label: 'Attach BIS Monitor',
+    category: 'procedure',
+    description: 'Apply bispectral index forehead electrodes',
+    effect: { bis: 45 },
+    durationMs: 0,
+    onsetMs: 0,
+    precondition: (s) => s.bis === null,
+    preconditionFailureEvent: '⚠ BIS monitor already attached',
   },
 ]
 

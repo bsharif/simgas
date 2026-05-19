@@ -1,15 +1,23 @@
-import type { FC } from 'react'
+import { useState, type FC } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 import Monitor from '../components/Monitor/Monitor'
+import { MonitorSettingsButton } from '../components/Monitor/MonitorSettings'
+import AlarmMuteButton from '../components/Monitor/AlarmMuteButton'
 import RightPanel from '../components/RightPanel/RightPanel'
 import HintsPanel from '../components/Sidebar/HintsPanel'
 import ScenarioSelector from '../components/Scenario/ScenarioSelector'
 import ModeToggle from '../components/Scenario/ModeToggle'
+import DebriefView from '../components/Debrief/DebriefView'
 
 const SimulationView: FC = () => {
   const { paused, togglePause, phase, startScenario, scenario } = useSimulation()
   const ended = phase === 'resolved' || phase === 'failed'
   const failed = phase === 'failed'
+  // Track which scenario the user dismissed the debrief for, so it auto-opens
+  // on a fresh termination but doesn't re-open if they hit Close on the same
+  // run. Derived from scenario id rather than a useEffect/setState dance.
+  const [debriefDismissedFor, setDebriefDismissedFor] = useState<string | null>(null)
+  const debriefOpen = ended && scenario !== null && debriefDismissedFor !== scenario.id
 
   return (
     <div style={{
@@ -41,6 +49,8 @@ const SimulationView: FC = () => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModeToggle />
+          <AlarmMuteButton />
+          <MonitorSettingsButton />
           <button
             onClick={togglePause}
             title={paused ? 'Resume' : 'Pause'}
@@ -113,6 +123,21 @@ const SimulationView: FC = () => {
             </div>
           </div>
           <button
+            onClick={() => setDebriefDismissedFor(null)}
+            style={{
+              padding: '7px 14px',
+              background: 'transparent',
+              border: '1px solid #d8d4ca',
+              borderRadius: 6,
+              color: '#666',
+              fontSize: 13,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Review
+          </button>
+          <button
             onClick={() => startScenario(scenario.id)}
             style={{
               padding: '7px 14px',
@@ -128,6 +153,10 @@ const SimulationView: FC = () => {
             Restart
           </button>
         </div>
+      )}
+
+      {debriefOpen && scenario && (
+        <DebriefView onClose={() => setDebriefDismissedFor(scenario.id)} />
       )}
     </div>
   )

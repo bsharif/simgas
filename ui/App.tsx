@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { SimulationProvider } from './context/SimulationContext'
+import { MonitorLayoutProvider } from './context/MonitorLayoutContext'
+import { AlarmsProvider } from './context/AlarmsContext'
 import StartPage from './pages/StartPage'
 import SimulationView from './pages/SimulationView'
 
@@ -18,7 +20,11 @@ function AppRouter() {
 function App() {
   return (
     <SimulationProvider>
-      <AppRouter />
+      <MonitorLayoutProvider>
+        <AlarmsProvider>
+          <AppRouter />
+        </AlarmsProvider>
+      </MonitorLayoutProvider>
     </SimulationProvider>
   )
 }

@@ -18,8 +18,10 @@ function loadAll(): Scenario[] {
   const scenarios: Scenario[] = []
   for (const [path, source] of Object.entries(rawModules)) {
     try {
-      const { spec } = parseScenarioFile(source, path)
-      scenarios.push(specToScenario(spec))
+      const { spec, body } = parseScenarioFile(source, path)
+      const scenario = specToScenario(spec)
+      scenario.debriefBody = body
+      scenarios.push(scenario)
     } catch (err) {
       // Fail loudly during module init so authors see the problem immediately.
       throw new Error(`Failed to load scenario ${path}:\n${(err as Error).message}`, { cause: err })

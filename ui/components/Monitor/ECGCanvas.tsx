@@ -1,12 +1,7 @@
 import { useRef, useCallback, type FC } from 'react'
 import { useCanvasRenderer } from '../../hooks/useCanvasRenderer'
 import type { SimulationEngine } from '../../../engine/physiology'
-import type { PatientState } from '../../../engine/patient'
-
-export type WaveformBufferKey = Extract<
-  keyof PatientState,
-  'ecgBuffer' | 'spo2Buffer' | 'etco2Buffer' | 'respBuffer'
->
+import type { WaveformBufferKey } from '../../../engine/patient'
 
 interface WaveformCanvasProps {
   engine: SimulationEngine

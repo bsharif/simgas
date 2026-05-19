@@ -433,9 +433,49 @@ body {
   min-height: 0;
 }
 
-.intellivue-wave--ecg canvas {
+.intellivue-wave--ecg canvas,
+.intellivue-wave--art canvas {
   padding-top: 22px;
 }
+
+.intellivue-wave--art .intellivue-wave__label {
+  color: #ff5566;
+  text-shadow: 0 0 6px rgba(255, 85, 102, 0.7);
+}
+
+@keyframes numeric-alarm-flash-red {
+  0%, 100% { box-shadow: inset 0 0 0 2px transparent; }
+  50%      { box-shadow: inset 0 0 0 2px rgba(255, 0, 51, 0.9); }
+}
+
+@keyframes numeric-alarm-flash-yellow {
+  0%, 100% { box-shadow: inset 0 0 0 2px transparent; }
+  50%      { box-shadow: inset 0 0 0 2px rgba(255, 196, 0, 0.85); }
+}
+
+@keyframes numeric-alarm-flash-cyan {
+  0%, 100% { box-shadow: inset 0 0 0 2px transparent; }
+  50%      { box-shadow: inset 0 0 0 2px rgba(80, 220, 240, 0.7); }
+}
+
+.numeric--alarm {
+  border-radius: 4px;
+}
+
+.debrief-body h1 { font-size: 18px; margin: 18px 0 8px; color: #1a5276; }
+.debrief-body h2 { font-size: 15px; margin: 16px 0 6px; color: #2c2c2c; }
+.debrief-body h3 { font-size: 13px; margin: 12px 0 4px; color: #2c2c2c; }
+.debrief-body p { margin: 4px 0 8px; }
+.debrief-body ul, .debrief-body ol { margin: 4px 0 10px; padding-left: 24px; }
+.debrief-body li { margin: 2px 0; }
+.debrief-body code {
+  background: #f3f1ea; padding: 1px 4px; border-radius: 3px;
+  font-family: "Courier New", monospace; font-size: 0.9em;
+}
+
+.numeric--alarm-red    { animation: numeric-alarm-flash-red    0.75s ease-in-out infinite; }
+.numeric--alarm-yellow { animation: numeric-alarm-flash-yellow 1.2s  ease-in-out infinite; }
+.numeric--alarm-cyan   { animation: numeric-alarm-flash-cyan   2.0s  ease-in-out infinite; }
 
 .intellivue-wave__label {
   position: absolute;
