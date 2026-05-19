@@ -39,6 +39,7 @@ export class SimulationEngine {
     this.interventions = []
     this.activeScenario = scenario
     this._paused = false
+    if (scenario.reset) scenario.reset()
     this.setPhase('running')
 
     this.broadcastEvent(`▶ Starting scenario: ${scenario.label}`)
@@ -226,8 +227,12 @@ export class SimulationEngine {
     }
 
     // Lerp vitals toward scenario-set targets (Phase 1.4). Drug deltas applied
-    // below sit on top of this drift instead of being overwritten by it.
-    applyDrift(this.state, deltaMs / 1000)
+    // below sit on top of this drift instead of being overwritten by it. Skip
+    // on the terminal tick — the scenario's resolve_snap / fail_snap is the
+    // intended final state and we don't want drift undoing it.
+    if (!scenarioEnded) {
+      applyDrift(this.state, deltaMs / 1000)
+    }
 
     const maxEffects = 20
     for (let i = 0; i < this.activeEffects.length && i < maxEffects; i++) {

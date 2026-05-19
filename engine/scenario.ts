@@ -22,6 +22,12 @@ export interface Scenario {
     interventions: string[],
     ctx?: ScenarioContext,
   ) => ScenarioUpdate
+  /**
+   * Optional hook called by the engine when the scenario starts (or restarts).
+   * Lets stateful scenarios (e.g. DSL-interpreted ones with phase state) clear
+   * per-run state. The TS-defined scenarios are stateless and don't need this.
+   */
+  reset?: () => void
 }
 
 export interface ScenarioUpdate {
