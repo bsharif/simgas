@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { SimulationProvider } from './context/SimulationContext'
 import StartPage from './pages/StartPage'
 import SimulationView from './pages/SimulationView'
-import './App.css'
 
 type Screen = 'start' | 'simulation'
 
