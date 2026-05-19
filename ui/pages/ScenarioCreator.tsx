@@ -154,6 +154,20 @@ function specToCreatorState(spec: ScenarioSpec, body: string): CreatorState {
   }
 }
 
+// ── constants ─────────────────────────────────────────────────────────────────
+
+const INTERVENTION_IDS = [
+  // drugs
+  'adrenaline-1', 'adrenaline-10', 'metaraminol', 'ephedrine', 'propofol', 'dantrolene',
+  // airway
+  'intubate', 're-intubate', 'extubate', 'jaw-thrust', 'guedel', 'sga', 'suction',
+  // ventilation
+  'increase-fio2', 'increase-tv', 'increase-rr', 'peep-up', 'manual-vent',
+  // procedures
+  'fluid-bolus', 'defibrillate', 'cpr', 'chest-decompression',
+  'arterial-line', 'cvp-line', 'bis-monitor',
+]
+
 // ── style constants ───────────────────────────────────────────────────────────
 
 const INPUT: React.CSSProperties = {
@@ -171,6 +185,103 @@ function SectionHeader({ title }: { title: string }) {
       paddingBottom: 8, marginBottom: 16, marginTop: 32,
     }}>
       {title}
+    </div>
+  )
+}
+
+function PredicateReference({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <div style={{ marginBottom: 16, borderRadius: 8, border: '1px solid #c8d8e8', background: '#eef4f9', overflow: 'hidden' }}>
+      <button
+        onClick={onToggle}
+        style={{
+          width: '100%', padding: '10px 14px', background: 'transparent', border: 'none',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#1a5276', letterSpacing: 1, textTransform: 'uppercase' }}>
+          {open ? '▾' : '▸'} Predicate Reference
+        </span>
+        <span style={{ fontSize: 12, color: '#888', fontStyle: 'italic' }}>
+          — what can you write in enter_when / resolve_when / fail_when?
+        </span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 14px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+          {/* left: variables */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#1a5276', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>
+              Variables
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <tbody>
+                {([
+                  ['time', 'seconds since scenario started'],
+                  ['phase_elapsed', 'seconds since this phase became active'],
+                  ['hr', 'heart rate (bpm)'],
+                  ['spo2', 'oxygen saturation (%)'],
+                  ['etco2', 'end-tidal CO₂ (kPa)'],
+                  ['rr', 'respiratory rate (/min)'],
+                  ['temp', 'core temperature (°C)'],
+                  ["tube_position", "'none' | 'trachea' | 'oesophagus'"],
+                ] as const).map(([name, desc]) => (
+                  <tr key={name}>
+                    <td style={{ padding: '3px 10px 3px 0', fontFamily: 'monospace', color: '#1a5276', fontWeight: 700, whiteSpace: 'nowrap', verticalAlign: 'top' }}>{name}</td>
+                    <td style={{ padding: '3px 0', color: '#555', lineHeight: 1.4 }}>{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* right: functions, operators, examples */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#1a5276', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>
+              Functions
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 12 }}>
+              <tbody>
+                {([
+                  ["any('glob')", "true if a matching intervention was given; * is wildcard, e.g. any('adrenaline-*')"],
+                  ["count('id')", "number of times an intervention was given"],
+                  ["phase_done('id')", "true if the named phase has previously been active"],
+                ] as const).map(([fn, desc]) => (
+                  <tr key={fn}>
+                    <td style={{ padding: '3px 10px 3px 0', fontFamily: 'monospace', color: '#cc7700', fontWeight: 700, whiteSpace: 'nowrap', verticalAlign: 'top' }}>{fn}</td>
+                    <td style={{ padding: '3px 0', color: '#555', fontSize: 11, lineHeight: 1.4 }}>{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#1a5276', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>
+              Operators
+            </div>
+            <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#555', marginBottom: 12, letterSpacing: 1 }}>
+              {'&&  ||  !  ==  !=  <  <=  >  >='}
+            </div>
+
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#1a5276', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>
+              Examples
+            </div>
+            {[
+              "time > 30 && !any('adrenaline-*')",
+              "tube_position == 'trachea'",
+              "phase_elapsed > 60",
+              "count('fluid-bolus') >= 2",
+              "hr < 50 || spo2 < 85",
+            ].map(ex => (
+              <div key={ex} style={{
+                fontFamily: 'monospace', fontSize: 11, color: '#1a3a52',
+                background: '#fff', borderRadius: 4, padding: '3px 7px',
+                marginBottom: 4, border: '1px solid #dce8f0',
+              }}>{ex}</div>
+            ))}
+          </div>
+
+        </div>
+      )}
     </div>
   )
 }
@@ -277,20 +388,31 @@ function PhaseCard({ phase, index, total, onChange, onRemove, onMoveUp, onMoveDo
           <input style={{ ...INPUT }} value={phase.id} placeholder="e.g. onset" onChange={e => set('id')(e.target.value)} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 240px' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#888', letterSpacing: 1, textTransform: 'uppercase' }}>enter_when (predicate)</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#888', letterSpacing: 1, textTransform: 'uppercase' }}>
+            enter_when
+            <span style={{ fontSize: 10, color: '#bbb', fontWeight: 400, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>
+              leave blank = always eligible (use for first/fallback phase)
+            </span>
+          </span>
           <input style={{ ...INPUT, fontFamily: 'monospace' }} value={phase.enter_when} placeholder="e.g. time > 30 && !any('adrenaline-*')" onChange={e => set('enter_when')(e.target.value)} />
         </label>
       </div>
 
       {/* baseline */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
-        Baseline (drift targets in this phase)
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+        Baseline
+      </div>
+      <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
+        Vitals drift toward these values while this phase is active (~1 unit/sec). Leave blank to inherit the previous phase's baseline.
       </div>
       <BaselineFields value={phase.baseline} onChange={v => set('baseline')(v)} />
 
       {/* timed events */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginTop: 16, marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginTop: 16, marginBottom: 4 }}>
         Timed Events
+      </div>
+      <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
+        Messages shown to the trainee at a fixed time after this phase becomes active. Format: <code style={{ background: '#eee', padding: '1px 4px', borderRadius: 3 }}>30s</code>
       </div>
       {phase.events.map((ev, ei) => (
         <div key={ei} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
@@ -321,46 +443,62 @@ function PhaseCard({ phase, index, total, onChange, onRemove, onMoveUp, onMoveDo
 
       {/* resolve */}
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
           Resolve Condition
+        </div>
+        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
+          When this evaluates to true the scenario ends in success. Leave blank if this phase doesn't end the scenario.
         </div>
         <input
           style={{ ...INPUT, width: '100%', fontFamily: 'monospace', marginBottom: 8 }}
           value={phase.resolve_when} placeholder="e.g. phase_elapsed > 90"
           onChange={e => set('resolve_when')(e.target.value)}
         />
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
-          Resolve Snap (optional final state)
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+          Resolve Snap
+        </div>
+        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
+          Vitals snapped instantly when the scenario succeeds. Leave blank to freeze on the current values.
         </div>
         <SnapFields value={phase.resolve_snap} onChange={v => set('resolve_snap')(v)} />
       </div>
 
       {/* fail */}
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
           Fail Condition
+        </div>
+        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
+          When this evaluates to true the scenario ends in failure. Leave blank if this phase can't trigger failure.
         </div>
         <input
           style={{ ...INPUT, width: '100%', fontFamily: 'monospace', marginBottom: 8 }}
           value={phase.fail_when} placeholder="e.g. phase_elapsed > 60"
           onChange={e => set('fail_when')(e.target.value)}
         />
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
-          Fail Snap (optional final state)
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+          Fail Snap
+        </div>
+        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
+          Vitals snapped instantly when the scenario fails. e.g. set ECG Rhythm to asystole.
         </div>
         <SnapFields value={phase.fail_snap} onChange={v => set('fail_snap')(v)} />
       </div>
 
       {/* hints_if_missing */}
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
-          Hints if Missing (intervention ID → hint text)
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+          Hints if Missing
+        </div>
+        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
+          In Guided mode: if the trainee hasn't given this intervention yet, show the hint. Type or pick an intervention ID — autocomplete available.
         </div>
         {phase.hints_if_missing.map((h, hi) => (
           <div key={hi} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
             <input
-              style={{ ...INPUT, width: 160, fontFamily: 'monospace' }}
-              value={h.id} placeholder="intervention-id"
+              style={{ ...INPUT, width: 180, fontFamily: 'monospace' }}
+              value={h.id} placeholder="pick intervention id"
+              list="intervention-ids"
               onChange={e => {
                 const hs = [...phase.hints_if_missing]; hs[hi] = { ...hs[hi], id: e.target.value }
                 set('hints_if_missing')(hs)
@@ -397,6 +535,7 @@ const ScenarioCreator: FC<ScenarioCreatorProps> = ({ onBack }) => {
   const { loadScenario } = useSimulation()
   const [state, setState] = useState<CreatorState>(INITIAL_STATE)
   const [error, setError] = useState<string | null>(null)
+  const [refOpen, setRefOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   return (
@@ -483,12 +622,18 @@ const ScenarioCreator: FC<ScenarioCreatorProps> = ({ onBack }) => {
         </p>
         <BaselineFields value={state.initial_baseline} onChange={v => setState(s => ({ ...s, initial_baseline: v }))} />
 
+        {/* datalist for intervention ID autocomplete, shared across all PhaseCards */}
+        <datalist id="intervention-ids">
+          {INTERVENTION_IDS.map(id => <option key={id} value={id} />)}
+        </datalist>
+
         {/* ── Phases ──────────────────────────────────────────────────── */}
         <SectionHeader title="Phases" />
         <p style={{ fontSize: 12, color: '#aaa', marginBottom: 12 }}>
           Phases are evaluated in order — <strong>last matching enter_when wins</strong>.
-          List from least to most specific. The first phase typically has no enter_when.
+          List from least to most specific. The first phase typically has no <code style={{ background: '#eee', padding: '1px 4px', borderRadius: 3 }}>enter_when</code> (it's always active as a fallback).
         </p>
+        <PredicateReference open={refOpen} onToggle={() => setRefOpen(o => !o)} />
         {state.phases.map((phase, i) => (
           <PhaseCard
             key={i}
