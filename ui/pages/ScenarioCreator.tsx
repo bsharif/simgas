@@ -19,12 +19,39 @@ interface BaselineForm {
   nibp_sys: string; nibp_dia: string
 }
 
+type ConditionSubject =
+  | 'time' | 'phase_elapsed'
+  | 'hr' | 'spo2' | 'etco2' | 'rr' | 'temp'
+  | 'tube_position'
+  | 'intervention_given' | 'intervention_not_given' | 'intervention_count'
+  | 'phase_done'
+
+type ConditionOp = '>' | '<' | '>=' | '<=' | '==' | '!='
+
+interface ConditionRow {
+  key: string
+  subject: ConditionSubject | ''
+  op: ConditionOp | ''
+  value: string
+  refId: string
+}
+
+interface ConditionField {
+  mode: 'builder' | 'raw'
+  rows: ConditionRow[]
+  join: 'AND' | 'OR'
+  raw: string
+}
+
 interface PhaseForm {
-  id: string; enter_when: string
+  id: string
+  enter_when: ConditionField
   baseline: BaselineForm
   events: Array<{ at: string; text: string }>
-  resolve_when: string; resolve_snap: SnapForm
-  fail_when: string; fail_snap: SnapForm
+  resolve_when: ConditionField
+  resolve_snap: SnapForm
+  fail_when: ConditionField
+  fail_snap: SnapForm
   hints_if_missing: Array<{ id: string; hint: string }>
 }
 
@@ -67,6 +94,96 @@ function snapFormToSpec(f: SnapForm): Snap | undefined {
   return Object.keys(obj).length > 0 ? obj : undefined
 }
 
+// ── condition field helpers ───────────────────────────────────────────────────
+
+const NUMERIC_SUBJECTS = new Set([
+  'time', 'phase_elapsed', 'hr', 'spo2', 'etco2', 'rr', 'temp',
+])
+
+const OP_LABELS: Record<string, string> = {
+  '>': 'is more than',
+  '<': 'is less than',
+  '>=': 'is at least',
+  '<=': 'is at most',
+  '==': 'equals',
+  '!=': 'does not equal',
+}
+
+const REF_SUBJECTS = new Set(['intervention_given', 'intervention_not_given', 'intervention_count', 'phase_done'])
+
+function emptyRow(): ConditionRow {
+  return { key: String(Math.random()), subject: '', op: '', value: '', refId: '' }
+}
+
+function emptyConditionField(): ConditionField {
+  return { mode: 'builder', rows: [], join: 'AND', raw: '' }
+}
+
+function conditionRowToStr(row: ConditionRow): string {
+  switch (row.subject) {
+    case 'time': case 'phase_elapsed':
+    case 'hr': case 'spo2': case 'etco2': case 'rr': case 'temp':
+      if (!row.op || !row.value) return ''
+      return `${row.subject} ${row.op} ${row.value}`
+    case 'tube_position':
+      if (!row.op || !row.value) return ''
+      return `tube_position ${row.op} '${row.value}'`
+    case 'intervention_given':
+      if (!row.refId) return ''
+      return `any('${row.refId}')`
+    case 'intervention_not_given':
+      if (!row.refId) return ''
+      return `!any('${row.refId}')`
+    case 'intervention_count':
+      if (!row.refId || !row.op || !row.value) return ''
+      return `count('${row.refId}') ${row.op} ${row.value}`
+    case 'phase_done':
+      if (!row.refId) return ''
+      return `phase_done('${row.refId}')`
+    default: return ''
+  }
+}
+
+function conditionFieldToStr(f: ConditionField): string | undefined {
+  if (f.mode === 'raw') return f.raw.trim() || undefined
+  const parts = f.rows.map(conditionRowToStr).filter(Boolean)
+  if (!parts.length) return undefined
+  return parts.join(f.join === 'AND' ? ' && ' : ' || ')
+}
+
+function parseConditionPart(part: string): ConditionRow | null {
+  const key = String(Math.random())
+  const anyM = part.match(/^any\('([^']+)'\)$/)
+  if (anyM) return { key, subject: 'intervention_given', op: '', value: '', refId: anyM[1] }
+  const notAnyM = part.match(/^!any\('([^']+)'\)$/)
+  if (notAnyM) return { key, subject: 'intervention_not_given', op: '', value: '', refId: notAnyM[1] }
+  const countM = part.match(/^count\('([^']+)'\)\s*(>=|<=|==|!=|>|<)\s*(\d+(?:\.\d+)?)$/)
+  if (countM) return { key, subject: 'intervention_count', op: countM[2] as ConditionOp, value: countM[3], refId: countM[1] }
+  const phaseM = part.match(/^phase_done\('([^']+)'\)$/)
+  if (phaseM) return { key, subject: 'phase_done', op: '', value: '', refId: phaseM[1] }
+  const tubeM = part.match(/^tube_position\s*(==|!=)\s*'([^']+)'$/)
+  if (tubeM) return { key, subject: 'tube_position', op: tubeM[1] as ConditionOp, value: tubeM[2], refId: '' }
+  const numM = part.match(/^(time|phase_elapsed|hr|spo2|etco2|rr|temp)\s*(>=|<=|==|!=|>|<)\s*(\d+(?:\.\d+)?)$/)
+  if (numM) return { key, subject: numM[1] as ConditionSubject, op: numM[2] as ConditionOp, value: numM[3], refId: '' }
+  return null
+}
+
+function parseConditionStr(str: string | undefined): ConditionField {
+  if (!str) return emptyConditionField()
+  const hasAnd = str.includes(' && ')
+  const hasOr = str.includes(' || ')
+  if (hasAnd && hasOr) return { mode: 'raw', rows: [], join: 'AND', raw: str }
+  const join: 'AND' | 'OR' = hasOr ? 'OR' : 'AND'
+  const parts = hasAnd ? str.split(' && ') : hasOr ? str.split(' || ') : [str]
+  const rows: ConditionRow[] = []
+  for (const p of parts) {
+    const row = parseConditionPart(p.trim())
+    if (!row) return { mode: 'raw', rows: [], join: 'AND', raw: str }
+    rows.push(row)
+  }
+  return { mode: 'builder', rows, join, raw: str }
+}
+
 function creatorStateToSpec(s: CreatorState): ScenarioSpec {
   return {
     id: s.id.trim() || 'untitled',
@@ -78,13 +195,13 @@ function creatorStateToSpec(s: CreatorState): ScenarioSpec {
     initial_baseline: baselineFormToSpec(s.initial_baseline),
     phases: s.phases.map(p => ({
       id: p.id.trim() || 'phase',
-      enter_when: p.enter_when.trim() || undefined,
+      enter_when: conditionFieldToStr(p.enter_when),
       baseline: baselineFormToSpec(p.baseline),
       events: p.events.filter(e => e.at && e.text),
-      resolve_when: p.resolve_when.trim() || undefined,
+      resolve_when: conditionFieldToStr(p.resolve_when),
       resolve_snap: snapFormToSpec(p.resolve_snap),
       resolve_events: [],
-      fail_when: p.fail_when.trim() || undefined,
+      fail_when: conditionFieldToStr(p.fail_when),
       fail_snap: snapFormToSpec(p.fail_snap),
       fail_events: [],
       hints_if_missing: Object.fromEntries(
@@ -115,15 +232,49 @@ function baselineToForm(b?: Baseline): BaselineForm {
   }
 }
 
+function specToCreatorState(spec: ScenarioSpec, body: string): CreatorState {
+  return {
+    id: spec.id, label: spec.label, description: spec.description,
+    difficulty: spec.difficulty, hints: [...spec.hints],
+    initial_state: snapToForm(spec.initial_state),
+    initial_baseline: baselineToForm(spec.initial_baseline),
+    phases: spec.phases.map(p => ({
+      id: p.id,
+      enter_when: parseConditionStr(p.enter_when),
+      baseline: baselineToForm(p.baseline),
+      events: [...p.events],
+      resolve_when: parseConditionStr(p.resolve_when),
+      resolve_snap: snapToForm(p.resolve_snap),
+      fail_when: parseConditionStr(p.fail_when),
+      fail_snap: snapToForm(p.fail_snap),
+      hints_if_missing: Object.entries(p.hints_if_missing).map(([id, hint]) => ({ id, hint })),
+    })),
+    debriefBody: body,
+  }
+}
+
+// ── constants ─────────────────────────────────────────────────────────────────
+
+const INTERVENTION_IDS = [
+  'adrenaline-1', 'adrenaline-10', 'metaraminol', 'ephedrine', 'propofol', 'dantrolene',
+  'intubate', 're-intubate', 'extubate', 'jaw-thrust', 'guedel', 'sga', 'suction',
+  'increase-fio2', 'increase-tv', 'increase-rr', 'peep-up', 'manual-vent',
+  'fluid-bolus', 'defibrillate', 'cpr', 'chest-decompression',
+  'arterial-line', 'cvp-line', 'bis-monitor',
+]
+
 const EMPTY_SNAP: SnapForm = snapToForm()
 const EMPTY_BASELINE: BaselineForm = baselineToForm()
 
 const EMPTY_PHASE: PhaseForm = {
-  id: '', enter_when: '',
+  id: '',
+  enter_when: emptyConditionField(),
   baseline: { ...EMPTY_BASELINE },
   events: [],
-  resolve_when: '', resolve_snap: { ...EMPTY_SNAP },
-  fail_when: '', fail_snap: { ...EMPTY_SNAP },
+  resolve_when: emptyConditionField(),
+  resolve_snap: { ...EMPTY_SNAP },
+  fail_when: emptyConditionField(),
+  fail_snap: { ...EMPTY_SNAP },
   hints_if_missing: [],
 }
 
@@ -135,38 +286,6 @@ const INITIAL_STATE: CreatorState = {
   phases: [{ ...EMPTY_PHASE, id: 'onset' }],
   debriefBody: '',
 }
-
-function specToCreatorState(spec: ScenarioSpec, body: string): CreatorState {
-  return {
-    id: spec.id, label: spec.label, description: spec.description,
-    difficulty: spec.difficulty, hints: [...spec.hints],
-    initial_state: snapToForm(spec.initial_state),
-    initial_baseline: baselineToForm(spec.initial_baseline),
-    phases: spec.phases.map(p => ({
-      id: p.id, enter_when: p.enter_when ?? '',
-      baseline: baselineToForm(p.baseline),
-      events: [...p.events],
-      resolve_when: p.resolve_when ?? '', resolve_snap: snapToForm(p.resolve_snap),
-      fail_when: p.fail_when ?? '', fail_snap: snapToForm(p.fail_snap),
-      hints_if_missing: Object.entries(p.hints_if_missing).map(([id, hint]) => ({ id, hint })),
-    })),
-    debriefBody: body,
-  }
-}
-
-// ── constants ─────────────────────────────────────────────────────────────────
-
-const INTERVENTION_IDS = [
-  // drugs
-  'adrenaline-1', 'adrenaline-10', 'metaraminol', 'ephedrine', 'propofol', 'dantrolene',
-  // airway
-  'intubate', 're-intubate', 'extubate', 'jaw-thrust', 'guedel', 'sga', 'suction',
-  // ventilation
-  'increase-fio2', 'increase-tv', 'increase-rr', 'peep-up', 'manual-vent',
-  // procedures
-  'fluid-bolus', 'defibrillate', 'cpr', 'chest-decompression',
-  'arterial-line', 'cvp-line', 'bis-monitor',
-]
 
 // ── style constants ───────────────────────────────────────────────────────────
 
@@ -185,103 +304,6 @@ function SectionHeader({ title }: { title: string }) {
       paddingBottom: 8, marginBottom: 16, marginTop: 32,
     }}>
       {title}
-    </div>
-  )
-}
-
-function PredicateReference({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  return (
-    <div style={{ marginBottom: 16, borderRadius: 8, border: '1px solid #c8d8e8', background: '#eef4f9', overflow: 'hidden' }}>
-      <button
-        onClick={onToggle}
-        style={{
-          width: '100%', padding: '10px 14px', background: 'transparent', border: 'none',
-          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
-        }}
-      >
-        <span style={{ fontSize: 12, fontWeight: 700, color: '#1a5276', letterSpacing: 1, textTransform: 'uppercase' }}>
-          {open ? '▾' : '▸'} Predicate Reference
-        </span>
-        <span style={{ fontSize: 12, color: '#888', fontStyle: 'italic' }}>
-          — what can you write in enter_when / resolve_when / fail_when?
-        </span>
-      </button>
-      {open && (
-        <div style={{ padding: '0 14px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-
-          {/* left: variables */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#1a5276', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>
-              Variables
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <tbody>
-                {([
-                  ['time', 'seconds since scenario started'],
-                  ['phase_elapsed', 'seconds since this phase became active'],
-                  ['hr', 'heart rate (bpm)'],
-                  ['spo2', 'oxygen saturation (%)'],
-                  ['etco2', 'end-tidal CO₂ (kPa)'],
-                  ['rr', 'respiratory rate (/min)'],
-                  ['temp', 'core temperature (°C)'],
-                  ["tube_position", "'none' | 'trachea' | 'oesophagus'"],
-                ] as const).map(([name, desc]) => (
-                  <tr key={name}>
-                    <td style={{ padding: '3px 10px 3px 0', fontFamily: 'monospace', color: '#1a5276', fontWeight: 700, whiteSpace: 'nowrap', verticalAlign: 'top' }}>{name}</td>
-                    <td style={{ padding: '3px 0', color: '#555', lineHeight: 1.4 }}>{desc}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* right: functions, operators, examples */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#1a5276', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>
-              Functions
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 12 }}>
-              <tbody>
-                {([
-                  ["any('glob')", "true if a matching intervention was given; * is wildcard, e.g. any('adrenaline-*')"],
-                  ["count('id')", "number of times an intervention was given"],
-                  ["phase_done('id')", "true if the named phase has previously been active"],
-                ] as const).map(([fn, desc]) => (
-                  <tr key={fn}>
-                    <td style={{ padding: '3px 10px 3px 0', fontFamily: 'monospace', color: '#cc7700', fontWeight: 700, whiteSpace: 'nowrap', verticalAlign: 'top' }}>{fn}</td>
-                    <td style={{ padding: '3px 0', color: '#555', fontSize: 11, lineHeight: 1.4 }}>{desc}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#1a5276', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>
-              Operators
-            </div>
-            <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#555', marginBottom: 12, letterSpacing: 1 }}>
-              {'&&  ||  !  ==  !=  <  <=  >  >='}
-            </div>
-
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#1a5276', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>
-              Examples
-            </div>
-            {[
-              "time > 30 && !any('adrenaline-*')",
-              "tube_position == 'trachea'",
-              "phase_elapsed > 60",
-              "count('fluid-bolus') >= 2",
-              "hr < 50 || spo2 < 85",
-            ].map(ex => (
-              <div key={ex} style={{
-                fontFamily: 'monospace', fontSize: 11, color: '#1a3a52',
-                background: '#fff', borderRadius: 4, padding: '3px 7px',
-                marginBottom: 4, border: '1px solid #dce8f0',
-              }}>{ex}</div>
-            ))}
-          </div>
-
-        </div>
-      )}
     </div>
   )
 }
@@ -357,6 +379,242 @@ function SnapFields({ value, onChange }: {
   )
 }
 
+function ConditionRowEditor({ row, onChange, onRemove }: {
+  row: ConditionRow
+  onChange: (r: ConditionRow) => void
+  onRemove: () => void
+}) {
+  const isNumeric = NUMERIC_SUBJECTS.has(row.subject)
+  const isTube = row.subject === 'tube_position'
+  const needsOp = isNumeric || isTube || row.subject === 'intervention_count'
+  const needsValue = isNumeric || isTube || row.subject === 'intervention_count'
+  const needsRefId = REF_SUBJECTS.has(row.subject)
+
+  return (
+    <div style={{
+      display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap',
+      background: '#f9f8f5', borderRadius: 8, padding: '10px 12px', border: '1px solid #e8e5de',
+    }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: 1 }}>When</span>
+        <select
+          style={{ ...INPUT, minWidth: 220 }}
+          value={row.subject}
+          onChange={e => onChange({ ...row, subject: e.target.value as ConditionSubject, op: '', value: '', refId: '' })}
+        >
+          <option value="">— choose —</option>
+          <optgroup label="Time">
+            <option value="time">Scenario time (seconds elapsed)</option>
+            <option value="phase_elapsed">Time in this phase (seconds)</option>
+          </optgroup>
+          <optgroup label="Vital signs">
+            <option value="hr">Heart rate – HR (bpm)</option>
+            <option value="spo2">SpO₂ (%)</option>
+            <option value="etco2">EtCO₂ (kPa)</option>
+            <option value="rr">Respiratory rate (/min)</option>
+            <option value="temp">Temperature (°C)</option>
+          </optgroup>
+          <optgroup label="Airway">
+            <option value="tube_position">Tube position</option>
+          </optgroup>
+          <optgroup label="Interventions">
+            <option value="intervention_given">Intervention HAS been given</option>
+            <option value="intervention_not_given">Intervention has NOT been given</option>
+            <option value="intervention_count">Intervention given N times</option>
+          </optgroup>
+          <optgroup label="Phases">
+            <option value="phase_done">A previous phase has completed</option>
+          </optgroup>
+        </select>
+      </label>
+
+      {needsOp && (
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: 1 }}>Is</span>
+          <select
+            style={{ ...INPUT, minWidth: isTube ? 160 : 150 }}
+            value={row.op}
+            onChange={e => onChange({ ...row, op: e.target.value as ConditionOp })}
+          >
+            <option value="">— select —</option>
+            {isTube ? (
+              <>
+                <option value="==">equals</option>
+                <option value="!=">does not equal</option>
+              </>
+            ) : (
+              Object.entries(OP_LABELS).map(([op, label]) => (
+                <option key={op} value={op}>{label}</option>
+              ))
+            )}
+          </select>
+        </label>
+      )}
+
+      {needsValue && (
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: 1 }}>Value</span>
+          {isTube ? (
+            <select
+              style={{ ...INPUT, width: 160 }}
+              value={row.value}
+              onChange={e => onChange({ ...row, value: e.target.value })}
+            >
+              <option value="">— select —</option>
+              <option value="trachea">Trachea</option>
+              <option value="oesophagus">Oesophagus</option>
+              <option value="none">None (not intubated)</option>
+            </select>
+          ) : (
+            <input
+              type="number"
+              style={{ ...INPUT, width: 90 }}
+              value={row.value}
+              placeholder={
+                row.subject === 'time' || row.subject === 'phase_elapsed' ? 'sec'
+                  : row.subject === 'hr' ? 'bpm'
+                  : row.subject === 'spo2' ? '%'
+                  : row.subject === 'etco2' ? 'kPa'
+                  : row.subject === 'rr' ? '/min'
+                  : row.subject === 'temp' ? '°C'
+                  : 'n'
+              }
+              onChange={e => onChange({ ...row, value: e.target.value })}
+            />
+          )}
+        </label>
+      )}
+
+      {needsRefId && (
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: 1 }}>
+            {row.subject === 'phase_done' ? 'Phase ID' : 'Intervention'}
+          </span>
+          <input
+            style={{ ...INPUT, width: 200 }}
+            value={row.refId}
+            list={row.subject !== 'phase_done' ? 'intervention-ids' : undefined}
+            placeholder={row.subject === 'phase_done' ? 'e.g. onset' : 'pick or type id'}
+            onChange={e => onChange({ ...row, refId: e.target.value })}
+          />
+        </label>
+      )}
+
+      <button
+        onClick={onRemove}
+        style={{ ...INPUT, padding: '7px 10px', cursor: 'pointer', color: '#cc3333', alignSelf: 'flex-end' }}
+      >
+        ✕
+      </button>
+    </div>
+  )
+}
+
+function ConditionBuilder({ field, onChange, isEnterWhen = false }: {
+  field: ConditionField
+  onChange: (f: ConditionField) => void
+  isEnterWhen?: boolean
+}) {
+  if (field.mode === 'raw') {
+    return (
+      <div style={{ background: '#fffbf0', border: '1px solid #e8d8a0', borderRadius: 8, padding: 12 }}>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
+          Advanced mode — edit the raw expression directly.
+        </div>
+        <input
+          style={{ ...INPUT, width: '100%', fontFamily: 'monospace', marginBottom: 8 }}
+          value={field.raw}
+          onChange={e => onChange({ ...field, raw: e.target.value })}
+          placeholder="e.g. time > 30 && !any('adrenaline-*')"
+        />
+        <button
+          onClick={() => {
+            const parsed = parseConditionStr(field.raw)
+            if (parsed.mode === 'builder') onChange(parsed)
+          }}
+          style={{ ...INPUT, cursor: 'pointer', fontSize: 12, color: '#1a5276', padding: '5px 10px', marginRight: 8 }}
+        >
+          Try builder view ↩
+        </button>
+        <button
+          onClick={() => onChange(emptyConditionField())}
+          style={{ ...INPUT, cursor: 'pointer', fontSize: 12, color: '#cc3333', padding: '5px 10px' }}
+        >
+          Clear
+        </button>
+      </div>
+    )
+  }
+
+  const updateRow = (i: number, row: ConditionRow) => {
+    const rows = [...field.rows]; rows[i] = row; onChange({ ...field, rows })
+  }
+  const removeRow = (i: number) => {
+    onChange({ ...field, rows: field.rows.filter((_, idx) => idx !== i) })
+  }
+  const toggleJoin = () => onChange({ ...field, join: field.join === 'AND' ? 'OR' : 'AND' })
+
+  const preview = conditionFieldToStr(field)
+
+  return (
+    <div>
+      {field.rows.length === 0 && (
+        <div style={{ fontSize: 12, color: '#aaa', fontStyle: 'italic', marginBottom: 8 }}>
+          {isEnterWhen
+            ? 'No conditions — this phase is always eligible (use for the first / fallback phase)'
+            : 'No conditions — this outcome will never trigger automatically'}
+        </div>
+      )}
+
+      {field.rows.map((row, i) => (
+        <div key={row.key}>
+          {i > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
+              <button
+                onClick={toggleJoin}
+                title="Click to toggle AND / OR"
+                style={{
+                  padding: '3px 14px', borderRadius: 20, cursor: 'pointer', fontWeight: 700,
+                  fontSize: 12, letterSpacing: 1, border: 'none',
+                  background: field.join === 'AND' ? '#1a5276' : '#cc7700',
+                  color: '#fff',
+                }}
+              >
+                {field.join}
+              </button>
+              <div style={{ flex: 1, height: 1, background: '#e0ddd5' }} />
+            </div>
+          )}
+          <ConditionRowEditor row={row} onChange={r => updateRow(i, r)} onRemove={() => removeRow(i)} />
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button
+          onClick={() => onChange({ ...field, rows: [...field.rows, emptyRow()] })}
+          style={{ ...INPUT, cursor: 'pointer', fontSize: 12, color: '#1a5276', padding: '6px 12px' }}
+        >
+          + Add Condition
+        </button>
+        <button
+          onClick={() => onChange({ ...field, mode: 'raw', raw: preview ?? '' })}
+          style={{ ...INPUT, cursor: 'pointer', fontSize: 11, color: '#aaa', padding: '5px 10px' }}
+        >
+          Advanced ↗
+        </button>
+        {preview && (
+          <code style={{
+            fontSize: 11, color: '#555', background: '#f0f0eb',
+            borderRadius: 4, padding: '3px 7px', flex: 1, wordBreak: 'break-all',
+          }}>
+            {preview}
+          </code>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function PhaseCard({ phase, index, total, onChange, onRemove, onMoveUp, onMoveDown }: {
   phase: PhaseForm
   index: number
@@ -382,20 +640,20 @@ function PhaseCard({ phase, index, total, onChange, onRemove, onMoveUp, onMoveDo
       </div>
 
       {/* id + enter_when */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '0 0 140px' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#888', letterSpacing: 1, textTransform: 'uppercase' }}>Phase ID</span>
           <input style={{ ...INPUT }} value={phase.id} placeholder="e.g. onset" onChange={e => set('id')(e.target.value)} />
         </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 240px' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#888', letterSpacing: 1, textTransform: 'uppercase' }}>
-            enter_when
+        <div style={{ flex: '1 1 340px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#888', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>
+            When does this phase become active?
             <span style={{ fontSize: 10, color: '#bbb', fontWeight: 400, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>
-              leave blank = always eligible (use for first/fallback phase)
+              no conditions = always eligible (first / fallback phase)
             </span>
-          </span>
-          <input style={{ ...INPUT, fontFamily: 'monospace' }} value={phase.enter_when} placeholder="e.g. time > 30 && !any('adrenaline-*')" onChange={e => set('enter_when')(e.target.value)} />
-        </label>
+          </div>
+          <ConditionBuilder field={phase.enter_when} onChange={v => set('enter_when')(v)} isEnterWhen />
+        </div>
       </div>
 
       {/* baseline */}
@@ -412,7 +670,7 @@ function PhaseCard({ phase, index, total, onChange, onRemove, onMoveUp, onMoveDo
         Timed Events
       </div>
       <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
-        Messages shown to the trainee at a fixed time after this phase becomes active. Format: <code style={{ background: '#eee', padding: '1px 4px', borderRadius: 3 }}>30s</code>
+        Messages shown at a fixed time after this phase becomes active. Format: <code style={{ background: '#eee', padding: '1px 4px', borderRadius: 3 }}>30s</code>
       </div>
       {phase.events.map((ev, ei) => (
         <div key={ei} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
@@ -442,51 +700,43 @@ function PhaseCard({ phase, index, total, onChange, onRemove, onMoveUp, onMoveDo
       </button>
 
       {/* resolve */}
-      <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
-          Resolve Condition
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f0ede6' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#27ae60', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+          Scenario succeeds when…
         </div>
-        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
-          When this evaluates to true the scenario ends in success. Leave blank if this phase doesn't end the scenario.
+        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>
+          When all conditions below are true the scenario ends in success. Leave empty if this phase doesn't end the scenario.
         </div>
-        <input
-          style={{ ...INPUT, width: '100%', fontFamily: 'monospace', marginBottom: 8 }}
-          value={phase.resolve_when} placeholder="e.g. phase_elapsed > 90"
-          onChange={e => set('resolve_when')(e.target.value)}
-        />
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+        <ConditionBuilder field={phase.resolve_when} onChange={v => set('resolve_when')(v)} />
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginTop: 12, marginBottom: 4 }}>
           Resolve Snap
         </div>
         <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
-          Vitals snapped instantly when the scenario succeeds. Leave blank to freeze on the current values.
+          Vitals snapped instantly when the scenario succeeds. Leave blank to freeze on current values.
         </div>
         <SnapFields value={phase.resolve_snap} onChange={v => set('resolve_snap')(v)} />
       </div>
 
       {/* fail */}
-      <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
-          Fail Condition
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f0ede6' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#cc3333', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+          Scenario fails when…
         </div>
-        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
-          When this evaluates to true the scenario ends in failure. Leave blank if this phase can't trigger failure.
+        <div style={{ fontSize: 12, color: '#aaa', marginBottom: 10 }}>
+          When all conditions below are true the scenario ends in failure. Leave empty if this phase can't trigger failure.
         </div>
-        <input
-          style={{ ...INPUT, width: '100%', fontFamily: 'monospace', marginBottom: 8 }}
-          value={phase.fail_when} placeholder="e.g. phase_elapsed > 60"
-          onChange={e => set('fail_when')(e.target.value)}
-        />
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
+        <ConditionBuilder field={phase.fail_when} onChange={v => set('fail_when')(v)} />
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginTop: 12, marginBottom: 4 }}>
           Fail Snap
         </div>
         <div style={{ fontSize: 12, color: '#aaa', marginBottom: 8 }}>
-          Vitals snapped instantly when the scenario fails. e.g. set ECG Rhythm to asystole.
+          Vitals snapped instantly when the scenario fails. e.g. set ECG Rhythm to Asystole.
         </div>
         <SnapFields value={phase.fail_snap} onChange={v => set('fail_snap')(v)} />
       </div>
 
       {/* hints_if_missing */}
-      <div style={{ marginTop: 16 }}>
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f0ede6' }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>
           Hints if Missing
         </div>
@@ -535,7 +785,6 @@ const ScenarioCreator: FC<ScenarioCreatorProps> = ({ onBack }) => {
   const { loadScenario } = useSimulation()
   const [state, setState] = useState<CreatorState>(INITIAL_STATE)
   const [error, setError] = useState<string | null>(null)
-  const [refOpen, setRefOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   return (
@@ -622,18 +871,17 @@ const ScenarioCreator: FC<ScenarioCreatorProps> = ({ onBack }) => {
         </p>
         <BaselineFields value={state.initial_baseline} onChange={v => setState(s => ({ ...s, initial_baseline: v }))} />
 
-        {/* datalist for intervention ID autocomplete, shared across all PhaseCards */}
+        {/* datalist for intervention ID autocomplete */}
         <datalist id="intervention-ids">
           {INTERVENTION_IDS.map(id => <option key={id} value={id} />)}
         </datalist>
 
         {/* ── Phases ──────────────────────────────────────────────────── */}
         <SectionHeader title="Phases" />
-        <p style={{ fontSize: 12, color: '#aaa', marginBottom: 12 }}>
-          Phases are evaluated in order — <strong>last matching enter_when wins</strong>.
-          List from least to most specific. The first phase typically has no <code style={{ background: '#eee', padding: '1px 4px', borderRadius: 3 }}>enter_when</code> (it's always active as a fallback).
+        <p style={{ fontSize: 12, color: '#aaa', marginBottom: 16 }}>
+          Phases are evaluated in order — <strong>last matching condition wins</strong>.
+          List from least to most specific. The first phase typically has no trigger condition (it's always the fallback).
         </p>
-        <PredicateReference open={refOpen} onToggle={() => setRefOpen(o => !o)} />
         {state.phases.map((phase, i) => (
           <PhaseCard
             key={i}
