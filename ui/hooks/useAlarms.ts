@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { detectAlarms, type AlarmPriority } from '../../engine/alarms'
 import type { PatientState } from '../../engine/patient'
-import { BUFFER_SIZE } from '../../engine/patient'
 import type { MonitorNumeric, NumericId } from '../../engine/monitor/layout'
 import type { SimulationEngine } from '../../engine/physiology'
 
@@ -153,20 +152,22 @@ export function useAlarms(
     }
   }, [])
 
-  // QRS pip — fires on each detected R-peak (rising edge through 0.5 in ecgBuffer).
+  // QRS pip — fires once per beat, aligned with the waveform generator's beat phase.
+  // generateECGSample uses `time % (60/hr)` so the R-peak occurs exactly when that
+  // phase wraps to zero. We detect the wrap in engine.elapsedSeconds rather than
+  // scanning the buffer (buffer sampling at 120 Hz is too coarse to catch the
+  // narrow R-peak reliably across tick boundaries).
+  const prevBeatPhaseRef = useRef(0)
   useEffect(() => {
     const unsub = engine.subscribe((s) => {
       const ctx = audioCtxRef.current
       if (!ctx || isMuted || s.ecgRhythm === 'asystole') return
-      // bufferWritePos points to the next-write slot, so -1 = newest, -2 = one older.
-      const newerIdx = (s.bufferWritePos - 1 + BUFFER_SIZE) % BUFFER_SIZE
-      const olderIdx = (s.bufferWritePos - 2 + BUFFER_SIZE) % BUFFER_SIZE
-      const newerSample = s.ecgBuffer[newerIdx]
-      const olderSample = s.ecgBuffer[olderIdx]
-      if (olderSample >= 0.5 || newerSample < 0.5) {
-        return
-      }
-      // Rising edge — schedule a short sine pip synchronised with the waveform.
+      const beatIntervalSec = 60 / Math.max(s.hr, 1)
+      const beatPhase = engine.elapsedSeconds % beatIntervalSec
+      const prevPhase = prevBeatPhaseRef.current
+      prevBeatPhaseRef.current = beatPhase
+      // Phase wrapped → R-peak just occurred this tick.
+      if (beatPhase >= prevPhase) return
       const t = ctx.currentTime + 0.002
       const freq = pitchFromSpo2(s.spo2)
       const osc = ctx.createOscillator()
