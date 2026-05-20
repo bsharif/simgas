@@ -1,6 +1,5 @@
 // ui/components/Monitor/Monitor.tsx
 import { useState, useCallback, type FC } from 'react'
-import { useSimulation } from '../../context/SimulationContext'
 import { useMonitorLayout } from '../../context/MonitorLayoutContext'
 import { useAlarmsContext } from '../../context/AlarmsContext'
 import { useNibpCycle } from '../../hooks/useNibpCycle'
@@ -11,6 +10,7 @@ import NumericTile from './NumericTile'
 import NibpPanel from './NibpPanel'
 import SoftKeyRow from './SoftKeyRow'
 import { numericValue, lineIsActive } from './monitorUtils'
+import { useMonitorSimulation } from './useMonitorSimulation'
 
 function formatDateTime(date: Date): string {
   return date.toLocaleString('en-GB', {
@@ -20,7 +20,7 @@ function formatDateTime(date: Date): string {
 }
 
 const Monitor: FC = () => {
-  const { state, scenario, engine } = useSimulation()
+  const { state, scenario, waveformSource } = useMonitorSimulation()
   const { layout } = useMonitorLayout()
   const { byNumeric, isMuted, toggleMute, acknowledgeAlarm } = useAlarmsContext()
   const nibpCycle = useNibpCycle(state.nibp)
@@ -76,7 +76,7 @@ const Monitor: FC = () => {
                 key={trace.id}
                 trace={trace}
                 numeric={numeric}
-                engine={engine}
+                waveformSource={waveformSource}
                 state={state}
                 alarmLevel={byNumeric.get(numeric.id)}
                 artZeroing={trace.id === 'art' && artZeroing}

@@ -32,6 +32,7 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
   let firedEventTimesForPhase = new Set<number>()
   let hintsFiredForPhase = new Set<string>()
   let completedPhases = new Set<string>()
+  let forcedPhaseId: string | null = null
   let terminated = false
 
   function reset(): void {
@@ -40,6 +41,7 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
     firedEventTimesForPhase = new Set()
     hintsFiredForPhase = new Set()
     completedPhases = new Set()
+    forcedPhaseId = null
     terminated = false
   }
 
@@ -65,6 +67,11 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
    * their conditions become true (e.g. drug given, tube fixed, timer elapsed).
    */
   function selectActivePhase(ctx: PredicateContext): number | null {
+    if (forcedPhaseId) {
+      const forcedIdx = compiledPhases.findIndex(phase => phase.spec.id === forcedPhaseId)
+      return forcedIdx === -1 ? null : forcedIdx
+    }
+
     let chosen: number | null = null
     for (let i = 0; i < compiledPhases.length; i++) {
       const p = compiledPhases[i]
@@ -172,18 +179,39 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
     // Terminal checks.
     if (compiled.failWhen && compiled.failWhen(phaseCtx)) {
       terminated = true
+      forcedPhaseId = null
       for (const text of phase.fail_events ?? []) events.push(text)
       applySnap(mods, phase.fail_snap)
       return { modifiers: mods, events, resolved: false, failed: true }
     }
     if (compiled.resolveWhen && compiled.resolveWhen(phaseCtx)) {
       terminated = true
+      forcedPhaseId = null
       for (const text of phase.resolve_events ?? []) events.push(text)
       applySnap(mods, phase.resolve_snap)
       return { modifiers: mods, events, resolved: true, failed: false }
     }
 
     return { modifiers: mods, events, resolved: false, failed: false }
+  }
+
+  function getRuntimeInfo() {
+    return {
+      currentPhaseId: currentPhaseIdx === null ? null : compiledPhases[currentPhaseIdx].spec.id,
+      completedPhaseIds: [...completedPhases],
+      forcedPhaseId,
+    }
+  }
+
+  function forcePhase(phaseId: string): boolean {
+    const exists = compiledPhases.some(phase => phase.spec.id === phaseId)
+    if (!exists) return false
+    forcedPhaseId = phaseId
+    return true
+  }
+
+  function clearForcedPhase(): void {
+    forcedPhaseId = null
   }
 
   return {
@@ -195,5 +223,8 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
     initialModifiers,
     check,
     reset,
+    getRuntimeInfo,
+    forcePhase,
+    clearForcedPhase,
   }
 }

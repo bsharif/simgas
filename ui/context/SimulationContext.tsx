@@ -8,6 +8,7 @@ import { INTERVENTION_MAP } from '../../engine/interventions'
 import type { DoseEntry } from '../../engine/doseLedger'
 import type { PatientState } from '../../engine/patient'
 import type { Scenario } from '../../engine/scenario'
+import { SimulationBridgeProvider, type SimulationBridgeValue } from './SimulationBridge'
 
 type Mode = 'guided' | 'exam' | 'free'
 
@@ -144,6 +145,36 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setPaused(engine.paused)
   }, [engine])
 
+  const bridgeValue = useMemo<SimulationBridgeValue>(() => ({
+    state,
+    scenario,
+    phase,
+    elapsedSeconds,
+    eventLog,
+    doseLedger,
+    waveformSource: engine,
+    audioSource: {
+      subscribe: cb => engine.subscribe(cb),
+      getElapsedSeconds: () => engine.elapsedSeconds,
+    },
+    applyIntervention,
+    updateMachineSettings,
+    setManualVentilation,
+    togglePause,
+  }), [
+    state,
+    scenario,
+    phase,
+    elapsedSeconds,
+    eventLog,
+    doseLedger,
+    engine,
+    applyIntervention,
+    updateMachineSettings,
+    setManualVentilation,
+    togglePause,
+  ])
+
   return (
     <SimulationContext.Provider
       value={{
@@ -168,7 +199,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         failed: phase === 'failed',
       }}
     >
-      {children}
+      <SimulationBridgeProvider value={bridgeValue}>{children}</SimulationBridgeProvider>
     </SimulationContext.Provider>
   )
 }

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { detectAlarms, type AlarmPriority } from '../../engine/alarms'
 import type { PatientState } from '../../engine/patient'
 import type { MonitorNumeric, NumericId } from '../../engine/monitor/layout'
-import type { SimulationEngine } from '../../engine/physiology'
 import { getAudioContext } from '../audio/audioContext'
 
 /**
@@ -27,6 +26,11 @@ interface UseAlarmsResult {
   /** Seconds remaining on the auto-resilence timer, or null. */
   muteRemainingSec: number | null
   acknowledgeAlarm: () => void
+}
+
+interface AlarmAudioSource {
+  subscribe: (cb: (state: PatientState) => void) => () => void
+  getElapsedSeconds: () => number
 }
 
 const ALARM_RANK: Record<AlarmPriority, number> = { none: 0, cyan: 1, yellow: 2, red: 3 }
@@ -61,7 +65,7 @@ function pitchFromSpo2(spo2: number): number {
 export function useAlarms(
   state: PatientState,
   numerics: readonly MonitorNumeric[],
-  engine: SimulationEngine,
+  audioSource?: AlarmAudioSource,
 ): UseAlarmsResult {
   // Re-evaluate at ~2 Hz independently of the throttled React state cadence,
   // and provide a clock for the mute-countdown display. We snapshot the
@@ -144,14 +148,15 @@ export function useAlarms(
   const prevRespPhaseRef = useRef(0)
   const prevVentActiveRef = useRef(false)
   useEffect(() => {
-    const unsub = engine.subscribe((s) => {
+    if (!audioSource) return undefined
+    const unsub = audioSource.subscribe((s) => {
       const ctx = getAudioContext()
       if (!ctx || isMuted) return
 
       // --- QRS pip ---
       if (s.ecgRhythm !== 'asystole') {
         const beatIntervalSec = 60 / Math.max(s.hr, 1)
-        const beatPhase = engine.elapsedSeconds % beatIntervalSec
+        const beatPhase = audioSource.getElapsedSeconds() % beatIntervalSec
         const prevPhase = prevBeatPhaseRef.current
         prevBeatPhaseRef.current = beatPhase
         if (beatPhase < prevPhase) {
@@ -174,7 +179,7 @@ export function useAlarms(
       // --- Ventilator breath sounds ---
       if (s.ventilationMode === 'ventilator') {
         const respIntervalSec = 60 / Math.max(s.rr, 1)
-        const respPhase = engine.elapsedSeconds % respIntervalSec
+        const respPhase = audioSource.getElapsedSeconds() % respIntervalSec
         const prevResp = prevRespPhaseRef.current
         prevRespPhaseRef.current = respPhase
         if (respPhase < prevResp) {
@@ -214,7 +219,7 @@ export function useAlarms(
       prevVentActiveRef.current = s.manualVentilationActive
     })
     return unsub
-  }, [engine, isMuted])
+  }, [audioSource, isMuted])
 
   // Schedule alarm beeps.
   useEffect(() => {

@@ -2,8 +2,8 @@
 import type { FC } from 'react'
 import type { MonitorTrace, MonitorNumeric } from '../../../engine/monitor/layout'
 import type { PatientState, EcgRhythm } from '../../../engine/patient'
-import type { SimulationEngine } from '../../../engine/physiology'
 import type { AlarmPriority } from '../../../engine/alarms'
+import type { WaveformSource } from './waveformSource'
 import ECGCanvas from './ECGCanvas'
 import SimpleWaveformCanvas from './SimpleWaveformCanvas'
 import { numericValue, lineIsActive } from './monitorUtils'
@@ -19,7 +19,7 @@ const RHYTHM_LABELS: Record<EcgRhythm, string> = {
 interface MonitorBandProps {
   trace: MonitorTrace
   numeric: MonitorNumeric
-  engine: SimulationEngine
+  waveformSource: WaveformSource
   state: PatientState
   alarmLevel?: AlarmPriority
   /** True when the Zero ART transducer action is in progress. */
@@ -27,7 +27,7 @@ interface MonitorBandProps {
 }
 
 const MonitorBand: FC<MonitorBandProps> = ({
-  trace, numeric, engine, state, alarmLevel, artZeroing = false,
+  trace, numeric, waveformSource, state, alarmLevel, artZeroing = false,
 }) => {
   const active = lineIsActive(numeric.id, state)
   const alarmClass = alarmLevel && alarmLevel !== 'none'
@@ -47,9 +47,9 @@ const MonitorBand: FC<MonitorBandProps> = ({
 
         {active ? (
           trace.rendererStyle === 'ecg' ? (
-            <ECGCanvas engine={engine} bufferKey={trace.bufferKey} color={trace.color} />
+            <ECGCanvas waveformSource={waveformSource} bufferKey={trace.bufferKey} color={trace.color} />
           ) : (
-            <SimpleWaveformCanvas engine={engine} bufferKey={trace.bufferKey} color={trace.color} />
+            <SimpleWaveformCanvas waveformSource={waveformSource} bufferKey={trace.bufferKey} color={trace.color} />
           )
         ) : (
           <div className="monitor-band__inactive-hint">Insert line to activate</div>

@@ -141,4 +141,45 @@ describe('specToScenario interpreter', () => {
     expect(scenario.initialModifiers.spo2).toBe(95)
     expect(scenario.initialModifiers.baseline?.hr).toBe(130)
   })
+
+  it('forced phase runtime info reports current and completed phases', () => {
+    scenario.check(0, [], { state })
+    scenario.check(31, [], { state })
+
+    expect(scenario.getRuntimeInfo?.()).toEqual({
+      currentPhaseId: 'untreated',
+      completedPhaseIds: ['onset'],
+      forcedPhaseId: null,
+    })
+  })
+
+  it('forced phase keeps recovery active when enter_when is false', () => {
+    scenario.forcePhase?.('recovery')
+
+    const r = scenario.check(0, [], { state })
+
+    expect(r.modifiers.baseline?.hr).toBe(80)
+    expect(scenario.getRuntimeInfo?.().forcedPhaseId).toBe('recovery')
+  })
+
+  it('clearForcedPhase returns to automatic last-matching phase selection', () => {
+    scenario.forcePhase?.('recovery')
+    scenario.check(0, [], { state })
+    scenario.clearForcedPhase?.()
+
+    const r = scenario.check(31, [], { state })
+
+    expect(r.modifiers.baseline?.hr).toBe(150)
+    expect(scenario.getRuntimeInfo?.().forcedPhaseId).toBeNull()
+  })
+
+  it('forced phase can resolve from that phase', () => {
+    scenario.forcePhase?.('recovery')
+    scenario.check(0, [], { state })
+
+    const r = scenario.check(21, [], { state })
+
+    expect(r.resolved).toBe(true)
+    expect(r.modifiers.hr).toBe(78)
+  })
 })

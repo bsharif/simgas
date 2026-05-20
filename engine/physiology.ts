@@ -1,6 +1,6 @@
 import { type PatientState, createBaselineState, BUFFER_SIZE } from './patient'
 import type { Scenario } from './scenario'
-import { type Intervention, type ActiveEffect, applyModifier, applyDrift, createActiveEffect } from './interventions'
+import { type Intervention, type ActiveEffect, type PatientModifier, applyModifier, applyDrift, createActiveEffect } from './interventions'
 import { type DoseEntry, makeDoseLedger, recordDose, canApply } from './doseLedger'
 import { generateECGSample, generateSpO2Sample, generateETCO2Sample, generateRespSample, generateArterialSample, SAMPLES_PER_TICK } from './waveforms'
 
@@ -10,6 +10,25 @@ type StateSubscriber = (state: PatientState) => void
 type EventSubscriber = (event: string) => void
 type PhaseSubscriber = (phase: SimulationPhase) => void
 type DoseLedgerSubscriber = (ledger: ReadonlyMap<string, DoseEntry>) => void
+
+interface EngineRuntime {
+  now: () => number
+  scheduleFrame: (callback: (timestamp: number) => void) => unknown
+  cancelFrame: (handle: unknown) => void
+}
+
+interface SimulationEngineOptions {
+  runtime?: EngineRuntime
+  modifierHook?: ModifierHook
+}
+
+type ModifierHook = (state: PatientState, elapsedSec: number) => PatientModifier | null
+
+const browserRuntime: EngineRuntime = {
+  now: () => performance.now(),
+  scheduleFrame: callback => requestAnimationFrame(callback),
+  cancelFrame: handle => cancelAnimationFrame(Number(handle)),
+}
 
 export class SimulationEngine {
   state: PatientState
@@ -21,16 +40,20 @@ export class SimulationEngine {
   private activeScenario: Scenario | null = null
   private appliedScenarioModifiers = false
   private elapsedMs = 0
-  private rafId: number | null = null
+  private rafId: unknown | null = null
   private lastTimestamp = 0
   private interventions: string[] = []
   private doseLedger = makeDoseLedger()
   private _paused = false
   private _phase: SimulationPhase = 'idle'
   private lastManualBreathMs = 0
+  private runtime: EngineRuntime
+  private modifierHook: ModifierHook | null
   private static readonly MANUAL_BREATH_DEBOUNCE_MS = 600
 
-  constructor() {
+  constructor(options: SimulationEngineOptions = {}) {
+    this.runtime = options.runtime ?? browserRuntime
+    this.modifierHook = options.modifierHook ?? null
     this.state = createBaselineState()
   }
 
@@ -54,8 +77,8 @@ export class SimulationEngine {
     this.broadcastDoseLedger()
 
     this.broadcastEvent(`▶ Starting scenario: ${scenario.label}`)
-    this.lastTimestamp = performance.now()
-    this.rafId = requestAnimationFrame(this.tick)
+    this.lastTimestamp = this.runtime.now()
+    this.rafId = this.runtime.scheduleFrame(this.tick)
   }
 
   /** Full teardown — clears scenario and rAF, returns to idle. */
@@ -76,7 +99,7 @@ export class SimulationEngine {
 
   private cancelTick(): void {
     if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId)
+      this.runtime.cancelFrame(this.rafId)
       this.rafId = null
     }
   }
@@ -93,7 +116,7 @@ export class SimulationEngine {
     if (this._phase !== 'running') return
     this._paused = !this._paused
     if (!this._paused) {
-      this.lastTimestamp = performance.now()
+      this.lastTimestamp = this.runtime.now()
     }
     this.broadcastEvent(this._paused ? '⏸ Paused' : '▶ Resumed')
   }
@@ -178,7 +201,7 @@ export class SimulationEngine {
     this.state.manualVentilationActive = active
 
     if (active) {
-      const now = performance.now()
+      const now = this.runtime.now()
       if (now - this.lastManualBreathMs >= SimulationEngine.MANUAL_BREATH_DEBOUNCE_MS) {
         this.lastManualBreathMs = now
         this.applyManualBreath()
@@ -229,8 +252,8 @@ export class SimulationEngine {
 
   private tick = (timestamp: number): void => {
     if (this._paused) {
-      this.lastTimestamp = performance.now()
-      this.rafId = requestAnimationFrame(this.tick)
+      this.lastTimestamp = this.runtime.now()
+      this.rafId = this.runtime.scheduleFrame(this.tick)
       return
     }
 
@@ -262,6 +285,11 @@ export class SimulationEngine {
       } else if (update.failed) {
         scenarioEnded = 'failed'
       }
+    }
+
+    const hookModifier = this.modifierHook?.(this.state, this.elapsedMs / 1000)
+    if (hookModifier) {
+      applyModifier(this.state, hookModifier)
     }
 
     // Lerp vitals toward scenario-set targets (Phase 1.4). Drug deltas applied
@@ -318,7 +346,7 @@ export class SimulationEngine {
       return
     }
 
-    this.rafId = requestAnimationFrame(this.tick)
+    this.rafId = this.runtime.scheduleFrame(this.tick)
   }
 
   private prefillBuffers(): void {
