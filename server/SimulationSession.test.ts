@@ -80,7 +80,7 @@ describe('SimulationSession', () => {
       'session_info',
       'phase_change',
     ])
-    expect(reconnect.messages[0]).toEqual({ type: 'event_log_snapshot', events: ['Started'] })
+    expect(reconnect.messages[0]).toEqual({ type: 'event_log_snapshot', events: ['▶ Starting scenario: Anaphylaxis', 'Started'] })
     expect(reconnect.messages[1]).toEqual({ type: 'state', snapshot: snapshot('failed') })
   })
 

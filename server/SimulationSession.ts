@@ -87,6 +87,9 @@ export class SimulationSession {
     this.lastEmptyAt = null
     send({ type: 'session_created', sessionCode: this.code, role: 'trainer', token: trainer.token })
     this.sendSessionInfo(trainer)
+    if (this.scenarioId) {
+      this.startScenario(this.scenarioId)
+    }
     return { clientId: trainer.id, token: trainer.token }
   }
 
