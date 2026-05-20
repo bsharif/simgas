@@ -55,6 +55,8 @@ const PhaseSchema = z
     id: z.string(),
     /** Predicate string. Default is "true" (this phase always wants to be active). */
     enter_when: z.string().optional(),
+    /** Instant state change applied once when this phase is first entered. */
+    snap: SnapSchema.optional(),
     /** Drift targets applied while this phase is active. */
     baseline: BaselineSchema.optional(),
     /** Timed events relative to phase entry. */

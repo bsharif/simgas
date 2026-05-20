@@ -117,6 +117,7 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
     const predicateCtx = buildPredicateCtx(elapsed, interventions, ctx.state)
     const nextIdx = selectActivePhase(predicateCtx)
 
+    let justEntered = false
     if (nextIdx !== currentPhaseIdx) {
       if (currentPhaseIdx !== null) {
         completedPhases.add(compiledPhases[currentPhaseIdx].spec.id)
@@ -125,6 +126,7 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
       phaseEnteredAtSec = elapsed
       firedEventTimesForPhase = new Set()
       hintsFiredForPhase = new Set()
+      justEntered = true
     }
 
     if (currentPhaseIdx === null) {
@@ -135,6 +137,7 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
     const compiled = compiledPhases[currentPhaseIdx]
 
     applyBaseline(mods, phase.baseline)
+    if (justEntered) applySnap(mods, phase.snap)
 
     // Re-evaluate predicate ctx with the now-correct phaseElapsed.
     const phaseCtx = buildPredicateCtx(elapsed, interventions, ctx.state)

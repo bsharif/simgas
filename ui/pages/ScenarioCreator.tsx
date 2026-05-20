@@ -44,9 +44,15 @@ interface ConditionField {
   raw: string
 }
 
+interface PhaseSnapForm {
+  ecgRhythm: '' | 'sinus' | 'vf' | 'vt' | 'asystole' | 'svt'
+  tubePosition: '' | 'none' | 'trachea' | 'oesophagus'
+}
+
 interface PhaseForm {
   id: string
   enter_when: ConditionField
+  snap: PhaseSnapForm
   baseline: BaselineForm
   events: Array<{ at: string; text: string }>
   resolve_when: ConditionField
@@ -83,6 +89,13 @@ function baselineFormToSpec(f: BaselineForm): Baseline | undefined {
   const sys = parseNum(f.nibp_sys); const dia = parseNum(f.nibp_dia)
   if (sys !== undefined || dia !== undefined) obj.nibp = { sys, dia }
   return Object.keys(obj).length > 0 ? obj : undefined
+}
+
+function phaseSnapFormToSpec(f: PhaseSnapForm): Snap | undefined {
+  const s: Partial<Snap> = {}
+  if (f.ecgRhythm) s.ecgRhythm = f.ecgRhythm
+  if (f.tubePosition) s.tubePosition = f.tubePosition
+  return Object.keys(s).length > 0 ? s as Snap : undefined
 }
 
 function snapFormToSpec(f: SnapForm): Snap | undefined {
@@ -197,6 +210,7 @@ function creatorStateToSpec(s: CreatorState): ScenarioSpec {
     phases: s.phases.map(p => ({
       id: p.id.trim() || 'phase',
       enter_when: conditionFieldToStr(p.enter_when),
+      snap: phaseSnapFormToSpec(p.snap),
       baseline: baselineFormToSpec(p.baseline),
       events: p.events.filter(e => e.at && e.text),
       resolve_when: conditionFieldToStr(p.resolve_when),
@@ -242,6 +256,7 @@ function specToCreatorState(spec: ScenarioSpec, body: string): CreatorState {
     phases: spec.phases.map(p => ({
       id: p.id,
       enter_when: parseConditionStr(p.enter_when),
+      snap: { ecgRhythm: (p.snap?.ecgRhythm ?? '') as PhaseSnapForm['ecgRhythm'], tubePosition: (p.snap?.tubePosition ?? '') as PhaseSnapForm['tubePosition'] },
       baseline: baselineToForm(p.baseline),
       events: [...p.events],
       resolve_when: parseConditionStr(p.resolve_when),
@@ -270,6 +285,7 @@ const EMPTY_BASELINE: BaselineForm = baselineToForm()
 const EMPTY_PHASE: PhaseForm = {
   id: '',
   enter_when: emptyConditionField(),
+  snap: { ecgRhythm: '', tubePosition: '' },
   baseline: { ...EMPTY_BASELINE },
   events: [],
   resolve_when: emptyConditionField(),
@@ -665,6 +681,30 @@ function PhaseCard({ phase, index, total, onChange, onRemove, onMoveUp, onMoveDo
         Vitals drift toward these values while this phase is active (~1 unit/sec). Leave blank to inherit the previous phase's baseline.
       </div>
       <BaselineFields value={phase.baseline} onChange={v => set('baseline')(v)} />
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase' }}>ECG Rhythm on entry</span>
+          <select style={{ ...INPUT, width: 160 }} value={phase.snap.ecgRhythm}
+            onChange={e => set('snap')({ ...phase.snap, ecgRhythm: e.target.value as PhaseSnapForm['ecgRhythm'] })}>
+            <option value="">— unchanged —</option>
+            <option value="sinus">Sinus</option>
+            <option value="svt">SVT</option>
+            <option value="vt">VT</option>
+            <option value="vf">VF</option>
+            <option value="asystole">Asystole</option>
+          </select>
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase' }}>Tube position on entry</span>
+          <select style={{ ...INPUT, width: 160 }} value={phase.snap.tubePosition}
+            onChange={e => set('snap')({ ...phase.snap, tubePosition: e.target.value as PhaseSnapForm['tubePosition'] })}>
+            <option value="">— unchanged —</option>
+            <option value="none">None</option>
+            <option value="trachea">Trachea</option>
+            <option value="oesophagus">Oesophagus</option>
+          </select>
+        </label>
+      </div>
 
       {/* timed events */}
       <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: 1, textTransform: 'uppercase', marginTop: 16, marginBottom: 4 }}>
