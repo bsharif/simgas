@@ -1,3 +1,4 @@
+import { SEVOFLURANE_MAC_CONCENTRATION } from './patient'
 import type { PatientState } from './patient'
 import type { MonitorNumeric, NumericId } from './monitor/layout'
 
@@ -33,7 +34,7 @@ function rawValue(id: NumericId, state: PatientState): number | null {
     case 'temp':  return state.temp
     case 'etco2': return state.etco2
     case 'fio2':  return state.fio2 * 100
-    case 'mac':   return state.sevoflurane
+    case 'mac':   return state.sevoflurane / SEVOFLURANE_MAC_CONCENTRATION
     case 'art':   return state.art ? state.art.map : null
     case 'cvp':   return state.cvp
     case 'bis':   return state.bis

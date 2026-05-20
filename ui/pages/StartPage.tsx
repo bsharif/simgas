@@ -10,11 +10,22 @@ const scenarioMeta: Record<string, { icon: string; color: string }> = {
   anaphylaxis: { icon: '⚡', color: '#cc3333' },
   'oesophageal-intubation': { icon: '🫁', color: '#cc7700' },
   'malignant-hyperthermia': { icon: '🌡️', color: '#cc5500' },
+  bronchospasm: { icon: '💨', color: '#1a7fc1' },
+  laryngospasm: { icon: '🤐', color: '#b07d2a' },
+  'vf-cardiac-arrest': { icon: '💔', color: '#c0392b' },
+  svt: { icon: '🫀', color: '#8e44ad' },
+  'tension-pneumothorax': { icon: '📍', color: '#117a65' },
+  'haemorrhagic-shock': { icon: '🩸', color: '#922b21' },
+  last: { icon: '💉', color: '#6c3483' },
+  'high-spinal': { icon: '🦴', color: '#1a5276' },
 }
+
+const FEATURED_IDS = ['anaphylaxis', 'oesophageal-intubation', 'malignant-hyperthermia']
 
 const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
   const { scenarios, mode, setMode, startScenario } = useSimulation()
   const [selectedId, setSelectedId] = useState<string>('anaphylaxis')
+  const [showMore, setShowMore] = useState(false)
 
   const handleStart = () => {
     if (selectedId) {
@@ -70,102 +81,151 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
         marginBottom: 32,
         flexWrap: 'wrap',
         justifyContent: 'center',
+        maxWidth: 780,
       }}>
-        {scenarios.map(s => {
-          const isSelected = selectedId === s.id
-          const meta = scenarioMeta[s.id] || { icon: '📋', color: '#888' }
-          return (
-            <button
-              key={s.id}
-              onClick={() => setSelectedId(s.id)}
-              style={{
-                width: 230,
-                padding: 20,
-                borderRadius: 10,
-                border: isSelected ? `2px solid ${meta.color}` : '1px solid #e0ddd5',
-                background: isSelected ? '#ffffff' : '#fafafa',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'border-color 0.2s, background 0.2s',
-                boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = '#ffffff'
-                e.currentTarget.style.borderColor = meta.color
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = isSelected ? '#ffffff' : '#fafafa'
-                e.currentTarget.style.borderColor = isSelected ? meta.color : '#e0ddd5'
-              }}
-            >
-              <div style={{ fontSize: 28, marginBottom: 8 }}>
-                {meta.icon}
-              </div>
-              <div style={{
-                color: isSelected ? '#2c2c2c' : '#555',
-                fontSize: 16,
-                fontWeight: 600,
-                marginBottom: 6,
-              }}>
-                {s.label}
-              </div>
-              <div style={{
-                color: '#999',
-                fontSize: 13,
-                lineHeight: 1.4,
-              }}>
-                {s.description.length > 70 ? s.description.slice(0, 70) + '...' : s.description}
-              </div>
-              <div style={{
-                marginTop: 8,
-                fontSize: 12,
-                color: isSelected ? meta.color : '#bbb',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-              }}>
-                {s.difficulty}
-              </div>
-            </button>
-          )
-        })}
+        {(() => {
+          const featured = scenarios.filter(s => FEATURED_IDS.includes(s.id))
+          const more = scenarios.filter(s => !FEATURED_IDS.includes(s.id))
 
-        <button
-          key="__create"
-          onClick={onOpenCreator}
-          style={{
-            width: 230,
-            padding: 20,
-            borderRadius: 10,
-            border: '1px dashed #ccc',
-            background: '#fafafa',
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            transition: 'border-color 0.2s, background 0.2s',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = '#ffffff'
-            e.currentTarget.style.borderColor = '#1a5276'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = '#fafafa'
-            e.currentTarget.style.borderColor = '#ccc'
-          }}
-        >
-          <div style={{ fontSize: 28, lineHeight: 1 }}>?</div>
-          <div style={{
-            color: '#999',
-            fontSize: 14,
-            fontWeight: 600,
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-          }}>
-            + Create Scenario
-          </div>
-        </button>
+          const renderCard = (s: typeof scenarios[number]) => {
+            const isSelected = selectedId === s.id
+            const meta = scenarioMeta[s.id] || { icon: '📋', color: '#888' }
+            return (
+              <button
+                key={s.id}
+                onClick={() => setSelectedId(s.id)}
+                style={{
+                  width: 230,
+                  padding: 20,
+                  borderRadius: 10,
+                  border: isSelected ? `2px solid ${meta.color}` : '1px solid #e0ddd5',
+                  background: isSelected ? '#ffffff' : '#fafafa',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'border-color 0.2s, background 0.2s',
+                  boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#ffffff'
+                  e.currentTarget.style.borderColor = meta.color
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = isSelected ? '#ffffff' : '#fafafa'
+                  e.currentTarget.style.borderColor = isSelected ? meta.color : '#e0ddd5'
+                }}
+              >
+                <div style={{ fontSize: 28, marginBottom: 8 }}>{meta.icon}</div>
+                <div style={{
+                  color: isSelected ? '#2c2c2c' : '#555',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  marginBottom: 6,
+                }}>
+                  {s.label}
+                </div>
+                <div style={{ color: '#999', fontSize: 13, lineHeight: 1.4 }}>
+                  {s.description.length > 70 ? s.description.slice(0, 70) + '...' : s.description}
+                </div>
+                <div style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: isSelected ? meta.color : '#bbb',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                }}>
+                  {s.difficulty}
+                </div>
+              </button>
+            )
+          }
+
+          return (
+            <>
+              {featured.map(renderCard)}
+
+              {!showMore && (
+                <button
+                  onClick={() => setShowMore(true)}
+                  style={{
+                    width: 230,
+                    padding: 20,
+                    borderRadius: 10,
+                    border: '1px dashed #ccc',
+                    background: '#fafafa',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    transition: 'border-color 0.2s, background 0.2s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = '#ffffff'
+                    e.currentTarget.style.borderColor = '#1a5276'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = '#fafafa'
+                    e.currentTarget.style.borderColor = '#ccc'
+                  }}
+                >
+                  <div style={{ fontSize: 24, lineHeight: 1, color: '#aaa' }}>＋</div>
+                  <div style={{
+                    color: '#888',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    letterSpacing: 0.5,
+                  }}>
+                    More Scenarios
+                  </div>
+                  <div style={{ color: '#bbb', fontSize: 12 }}>
+                    {more.length} additional cases
+                  </div>
+                </button>
+              )}
+
+              {showMore && more.map(renderCard)}
+
+              <button
+                key="__create"
+                onClick={onOpenCreator}
+                style={{
+                  width: 230,
+                  padding: 20,
+                  borderRadius: 10,
+                  border: '1px dashed #ccc',
+                  background: '#fafafa',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  transition: 'border-color 0.2s, background 0.2s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#ffffff'
+                  e.currentTarget.style.borderColor = '#1a5276'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = '#fafafa'
+                  e.currentTarget.style.borderColor = '#ccc'
+                }}
+              >
+                <div style={{ fontSize: 28, lineHeight: 1 }}>✏️</div>
+                <div style={{
+                  color: '#999',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                }}>
+                  + Create Scenario
+                </div>
+              </button>
+            </>
+          )
+        })()}
       </div>
 
       <div style={{

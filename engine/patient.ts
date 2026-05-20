@@ -77,6 +77,9 @@ export type WaveformBufferKey =
   | 'respBuffer'
   | 'artBuffer'
 
+/** Sevoflurane concentration (% vol) that equals 1.0 MAC (population average, ~40 yr). */
+export const SEVOFLURANE_MAC_CONCENTRATION = 2.2
+
 export const BUFFER_SIZE = 2048
 
 export const NORMAL_RANGES = {

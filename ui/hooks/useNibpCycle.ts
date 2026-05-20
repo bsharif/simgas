@@ -108,8 +108,7 @@ export function useNibpCycle(nibp: NibpReading): NibpCycleResult {
     setMeasuring(true)
     measureTimerRef.current = setTimeout(() => {
       // Play measurement complete beep.
-      const ctx2 = getAudioContext()
-      if (ctx2) playNibpCompleteBeep(ctx2)
+      if (ctx) playNibpCompleteBeep(ctx)
 
       const current = nibpRef.current
       const jitter = (Math.random() - 0.5) * 10

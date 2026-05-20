@@ -52,6 +52,21 @@ const syringeLabels: Record<string, SyringeLabelSpec> = {
     dose: '2.5 mg/kg IV',
     className: 'syringe-label--misc',
   },
+  adenosine: {
+    drugName: 'Adenosine',
+    dose: '6 mg IV',
+    className: 'syringe-label--misc',
+  },
+  salbutamol: {
+    drugName: 'Salbutamol',
+    dose: '5 mg neb',
+    className: 'syringe-label--misc',
+  },
+  intralipid: {
+    drugName: 'Intralipid 20%',
+    dose: '100 ml IV',
+    className: 'syringe-label--misc',
+  },
 }
 
 type MachineSettingKey = Extract<keyof PatientState, 'fio2' | 'vt' | 'peep' | 'gasFlow' | 'rr' | 'sevoflurane'>

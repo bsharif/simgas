@@ -47,7 +47,11 @@ if (typeof document !== 'undefined') {
 // Register one-shot gesture listener so AudioContext is created on first
 // user interaction (browsers require a user gesture for AudioContext).
 if (typeof window !== 'undefined') {
-  const gestureHandler = () => { initAudioContext() }
+  const gestureHandler = () => {
+    initAudioContext()
+    window.removeEventListener('pointerdown', gestureHandler)
+    window.removeEventListener('keydown', gestureHandler)
+  }
   window.addEventListener('pointerdown', gestureHandler)
   window.addEventListener('keydown', gestureHandler)
 }
