@@ -1,6 +1,7 @@
 // ui/hooks/useNibpCycle.ts
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { NibpReading } from '../../engine/patient'
+import { getAudioContext } from '../audio/audioContext'
 
 export type NibpInterval = '1min' | '2.5min' | '5min' | '10min' | 'manual'
 
@@ -9,6 +10,37 @@ export interface NibpHistoryEntry {
   sys: number
   dia: number
   map: number
+}
+
+function scheduleNibpPumpClicks(ctx: AudioContext): void {
+  const t = ctx.currentTime
+  for (let i = 0; i < 4; i++) {
+    const clickT = t + i * 0.15
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.value = 100
+    gain.gain.setValueAtTime(0, clickT)
+    gain.gain.linearRampToValueAtTime(0.08, clickT + 0.005)
+    gain.gain.linearRampToValueAtTime(0, clickT + 0.04)
+    osc.connect(gain).connect(ctx.destination)
+    osc.start(clickT)
+    osc.stop(clickT + 0.05)
+  }
+}
+
+function playNibpCompleteBeep(ctx: AudioContext): void {
+  const t = ctx.currentTime + 0.002
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.value = 800
+  gain.gain.setValueAtTime(0, t)
+  gain.gain.linearRampToValueAtTime(0.10, t + 0.01)
+  gain.gain.linearRampToValueAtTime(0, t + 0.12)
+  osc.connect(gain).connect(ctx.destination)
+  osc.start(t)
+  osc.stop(t + 0.13)
 }
 
 const INTERVAL_MS: Record<NibpInterval, number> = {
@@ -68,8 +100,17 @@ export function useNibpCycle(nibp: NibpReading): NibpCycleResult {
 
   const triggerCycle = useCallback(() => {
     if (measureTimerRef.current !== null) clearTimeout(measureTimerRef.current)
+
+    // Play NIBP cuff inflation pump clicks.
+    const ctx = getAudioContext()
+    if (ctx) scheduleNibpPumpClicks(ctx)
+
     setMeasuring(true)
     measureTimerRef.current = setTimeout(() => {
+      // Play measurement complete beep.
+      const ctx2 = getAudioContext()
+      if (ctx2) playNibpCompleteBeep(ctx2)
+
       const current = nibpRef.current
       const jitter = (Math.random() - 0.5) * 10
       const sys = Math.max(60, Math.round(current.sys + jitter))

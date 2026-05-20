@@ -3,6 +3,7 @@ import { detectAlarms, type AlarmPriority } from '../../engine/alarms'
 import type { PatientState } from '../../engine/patient'
 import type { MonitorNumeric, NumericId } from '../../engine/monitor/layout'
 import type { SimulationEngine } from '../../engine/physiology'
+import { getAudioContext } from '../audio/audioContext'
 
 /**
  * Audio + visual alarm hook (Phase 3.7).
@@ -128,59 +129,89 @@ export function useAlarms(
     return () => window.clearTimeout(id)
   }, [isMuted, muteUntilPerfMs])
 
-  const audioCtxRef = useRef<AudioContext | null>(null)
   const lastBurstAtRef = useRef(0)
   const lastPriorityRef = useRef<AlarmPriority>('none')
-
-  // Lazy-init AudioContext on first user gesture.
-  useEffect(() => {
-    if (audioCtxRef.current) return
-    const init = () => {
-      if (audioCtxRef.current) return
-      try {
-        const AudioCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-        if (AudioCtor) audioCtxRef.current = new AudioCtor()
-      } catch {
-        // ignore — browser may have blocked
-      }
-    }
-    window.addEventListener('pointerdown', init, { once: true })
-    window.addEventListener('keydown', init, { once: true })
-    return () => {
-      window.removeEventListener('pointerdown', init)
-      window.removeEventListener('keydown', init)
-    }
-  }, [])
 
   // QRS pip — fires once per beat, aligned with the waveform generator's beat phase.
   // generateECGSample uses `time % (60/hr)` so the R-peak occurs exactly when that
   // phase wraps to zero. We detect the wrap in engine.elapsedSeconds rather than
   // scanning the buffer (buffer sampling at 120 Hz is too coarse to catch the
   // narrow R-peak reliably across tick boundaries).
+  //
+  // Also handles ventilator breath sounds using the same phase-wrap technique
+  // on the respiratory cycle (60/rr).
   const prevBeatPhaseRef = useRef(0)
+  const prevRespPhaseRef = useRef(0)
+  const prevVentActiveRef = useRef(false)
   useEffect(() => {
     const unsub = engine.subscribe((s) => {
-      const ctx = audioCtxRef.current
-      if (!ctx || isMuted || s.ecgRhythm === 'asystole') return
-      const beatIntervalSec = 60 / Math.max(s.hr, 1)
-      const beatPhase = engine.elapsedSeconds % beatIntervalSec
-      const prevPhase = prevBeatPhaseRef.current
-      prevBeatPhaseRef.current = beatPhase
-      // Phase wrapped → R-peak just occurred this tick.
-      if (beatPhase >= prevPhase) return
-      const t = ctx.currentTime + 0.002
-      const freq = pitchFromSpo2(s.spo2)
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.type = 'sine'
-      osc.frequency.value = freq
-      gain.gain.setValueAtTime(0, t)
-      gain.gain.linearRampToValueAtTime(0.12, t + 0.01)
-      gain.gain.linearRampToValueAtTime(0.12, t + 0.05)
-      gain.gain.linearRampToValueAtTime(0, t + 0.06)
-      osc.connect(gain).connect(ctx.destination)
-      osc.start(t)
-      osc.stop(t + 0.07)
+      const ctx = getAudioContext()
+      if (!ctx || isMuted) return
+
+      // --- QRS pip ---
+      if (s.ecgRhythm !== 'asystole') {
+        const beatIntervalSec = 60 / Math.max(s.hr, 1)
+        const beatPhase = engine.elapsedSeconds % beatIntervalSec
+        const prevPhase = prevBeatPhaseRef.current
+        prevBeatPhaseRef.current = beatPhase
+        if (beatPhase < prevPhase) {
+          const t = ctx.currentTime + 0.002
+          const freq = pitchFromSpo2(s.spo2)
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.type = 'sine'
+          osc.frequency.value = freq
+          gain.gain.setValueAtTime(0, t)
+          gain.gain.linearRampToValueAtTime(0.12, t + 0.01)
+          gain.gain.linearRampToValueAtTime(0.12, t + 0.05)
+          gain.gain.linearRampToValueAtTime(0, t + 0.06)
+          osc.connect(gain).connect(ctx.destination)
+          osc.start(t)
+          osc.stop(t + 0.07)
+        }
+      }
+
+      // --- Ventilator breath sounds ---
+      if (s.ventilationMode === 'ventilator') {
+        const respIntervalSec = 60 / Math.max(s.rr, 1)
+        const respPhase = engine.elapsedSeconds % respIntervalSec
+        const prevResp = prevRespPhaseRef.current
+        prevRespPhaseRef.current = respPhase
+        if (respPhase < prevResp) {
+          const t = ctx.currentTime + 0.002
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          // Swept sine — 200→400 Hz, 100ms — "whoosh" of ventilator breath
+          osc.type = 'sine'
+          osc.frequency.setValueAtTime(200, t)
+          osc.frequency.linearRampToValueAtTime(400, t + 0.10)
+          gain.gain.setValueAtTime(0, t)
+          gain.gain.linearRampToValueAtTime(0.06, t + 0.01)
+          gain.gain.linearRampToValueAtTime(0.06, t + 0.08)
+          gain.gain.linearRampToValueAtTime(0, t + 0.10)
+          osc.connect(gain).connect(ctx.destination)
+          osc.start(t)
+          osc.stop(t + 0.11)
+        }
+      } else {
+        prevRespPhaseRef.current = 0
+      }
+
+      // --- Manual bag squeeze sound ---
+      if (s.manualVentilationActive && !prevVentActiveRef.current) {
+        const t = ctx.currentTime + 0.002
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.type = 'sine'
+        osc.frequency.value = 150
+        gain.gain.setValueAtTime(0, t)
+        gain.gain.linearRampToValueAtTime(0.08, t + 0.01)
+        gain.gain.linearRampToValueAtTime(0, t + 0.08)
+        osc.connect(gain).connect(ctx.destination)
+        osc.start(t)
+        osc.stop(t + 0.09)
+      }
+      prevVentActiveRef.current = s.manualVentilationActive
     })
     return unsub
   }, [engine, isMuted])
@@ -194,7 +225,7 @@ export function useAlarms(
       return
     }
     if (isMuted) return
-    const ctx = audioCtxRef.current
+    const ctx = getAudioContext()
     if (!ctx) return
 
     const pattern = PATTERNS[priority]
