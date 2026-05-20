@@ -14,9 +14,9 @@ const AlarmsContext = createContext<AlarmsValue | null>(null)
  * and one beep scheduler.
  */
 export function AlarmsProvider({ children }: { children: ReactNode }) {
-  const { state } = useSimulation()
+  const { state, engine } = useSimulation()
   const { layout } = useMonitorLayout()
-  const alarms = useAlarms(state, layout.numerics)
+  const alarms = useAlarms(state, layout.numerics, engine)
   return <AlarmsContext.Provider value={alarms}>{children}</AlarmsContext.Provider>
 }
 

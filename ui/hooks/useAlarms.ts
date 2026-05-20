@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { detectAlarms, type AlarmPriority } from '../../engine/alarms'
 import type { PatientState } from '../../engine/patient'
+import { BUFFER_SIZE } from '../../engine/patient'
 import type { MonitorNumeric, NumericId } from '../../engine/monitor/layout'
+import type { SimulationEngine } from '../../engine/physiology'
 
 /**
  * Audio + visual alarm hook (Phase 3.7).
@@ -50,9 +52,16 @@ const PATTERNS: Record<Exclude<AlarmPriority, 'none'>, TonePattern> = {
   cyan:   { freq: 480, count: 1, beepSec: 0.20, gapSec: 0,    intervalMs: 10000 },
 }
 
+function pitchFromSpo2(spo2: number): number {
+  // 440 * 2^((spo2 - 85) / 15): 100% → 880 Hz, 85% → 440 Hz, 70% → 220 Hz
+  const freq = 440 * Math.pow(2, (spo2 - 85) / 15)
+  return Math.max(100, Math.min(1500, freq))
+}
+
 export function useAlarms(
   state: PatientState,
   numerics: readonly MonitorNumeric[],
+  engine: SimulationEngine,
 ): UseAlarmsResult {
   // Re-evaluate at ~2 Hz independently of the throttled React state cadence,
   // and provide a clock for the mute-countdown display. We snapshot the
@@ -144,7 +153,38 @@ export function useAlarms(
     }
   }, [])
 
-  // Schedule beeps.
+  // QRS pip — fires on each detected R-peak (rising edge through 0.5 in ecgBuffer).
+  useEffect(() => {
+    const unsub = engine.subscribe((s) => {
+      const ctx = audioCtxRef.current
+      if (!ctx || isMuted || s.ecgRhythm === 'asystole') return
+      // bufferWritePos points to the next-write slot, so -1 = newest, -2 = one older.
+      const newerIdx = (s.bufferWritePos - 1 + BUFFER_SIZE) % BUFFER_SIZE
+      const olderIdx = (s.bufferWritePos - 2 + BUFFER_SIZE) % BUFFER_SIZE
+      const newerSample = s.ecgBuffer[newerIdx]
+      const olderSample = s.ecgBuffer[olderIdx]
+      if (olderSample >= 0.5 || newerSample < 0.5) {
+        return
+      }
+      // Rising edge — schedule a short sine pip synchronised with the waveform.
+      const t = ctx.currentTime + 0.002
+      const freq = pitchFromSpo2(s.spo2)
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, t)
+      gain.gain.linearRampToValueAtTime(0.12, t + 0.01)
+      gain.gain.linearRampToValueAtTime(0.12, t + 0.05)
+      gain.gain.linearRampToValueAtTime(0, t + 0.06)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(t)
+      osc.stop(t + 0.07)
+    })
+    return unsub
+  }, [engine, isMuted])
+
+  // Schedule alarm beeps.
   useEffect(() => {
     const priority = effectivePriority
     if (priority === 'none') {

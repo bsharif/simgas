@@ -78,6 +78,12 @@ export function detectAlarms(state: PatientState, numerics: readonly MonitorNume
   const byNumeric = new Map<NumericId, AlarmPriority>()
   let highest: AlarmPriority = 'none'
 
+  // VF is a shockable arrest rhythm — always RED regardless of numeric values.
+  if (state.ecgRhythm === 'vf') {
+    byNumeric.set('hr', 'red')
+    highest = 'red'
+  }
+
   for (const numeric of numerics) {
     if (!numeric.enabled || numeric.muted) continue
     const v = rawValue(numeric.id, state)
