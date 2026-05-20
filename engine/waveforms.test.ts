@@ -42,10 +42,28 @@ describe('SpO2 waveform', () => {
 describe('ETCO2 waveform', () => {
   it('generates capnography shape', () => {
     const samples = Array.from({ length: 200 }, (_, i) =>
-      generateETCO2Sample(i * 0.01, 14, 5.0, false)
+      generateETCO2Sample(i * 0.01, 14, 5.0, 'normal')
     )
     const maxVal = Math.max(...samples)
     expect(maxVal).toBeGreaterThan(0.5)
     expect(maxVal).toBeLessThanOrEqual(1.0)
+  })
+
+  it('returns flat line for absent shape', () => {
+    const samples = Array.from({ length: 200 }, (_, i) =>
+      generateETCO2Sample(i * 0.01, 14, 5.0, 'absent')
+    )
+    expect(samples.every(s => s === 0)).toBe(true)
+  })
+
+  it('generates bronchospasm sawtooth during exhalation', () => {
+    const normal = Array.from({ length: 200 }, (_, i) =>
+      generateETCO2Sample(i * 0.01, 14, 5.0, 'normal')
+    )
+    const bronchospasm = Array.from({ length: 200 }, (_, i) =>
+      generateETCO2Sample(i * 0.01, 14, 5.0, 'bronchospasm')
+    )
+    const diff = normal.reduce((acc, v, i) => acc + Math.abs(v - bronchospasm[i]), 0)
+    expect(diff).toBeGreaterThan(0)
   })
 })

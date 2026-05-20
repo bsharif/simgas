@@ -1,4 +1,4 @@
-import type { EcgRhythm } from './patient'
+import type { EcgRhythm, CapnographyShape } from './patient'
 
 const TWO_PI = Math.PI * 2
 
@@ -83,8 +83,10 @@ export function generateETCO2Sample(
   time: number,
   rr: number,
   etco2: number,
-  bronchospasm: boolean
+  shape: CapnographyShape
 ): number {
+  if (shape === 'absent') return 0
+
   const cycle = 60 / rr
   const t = time % cycle
   const inspiratoryFraction = 0.35
@@ -102,7 +104,7 @@ export function generateETCO2Sample(
 
   const exhalationProgress = (t - rampStart) / (cycle - rampStart)
 
-  if (bronchospasm && exhalationProgress > 0.1 && exhalationProgress < 0.9) {
+  if (shape === 'bronchospasm' && exhalationProgress > 0.1 && exhalationProgress < 0.9) {
     const sawtooth = Math.sin(exhalationProgress * 40) * 0.04 * plateauValue
     return plateauValue + sawtooth
   }

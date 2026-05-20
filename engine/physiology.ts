@@ -295,7 +295,7 @@ export class SimulationEngine {
       const t = elapsedSec + (i / SAMPLES_PER_TICK) * (deltaMs / 1000)
       const ecgVal = generateECGSample(t, this.state.hr, this.state.ecgRhythm)
       const spo2Val = generateSpO2Sample(t, this.state.hr, this.state.spo2)
-      const etco2Val = generateETCO2Sample(t, this.state.rr, this.state.etco2, false)
+      const etco2Val = generateETCO2Sample(t, this.state.rr, this.state.etco2, this.state.capnographyShape)
       const respVal = generateRespSample(t, this.state.rr, this.state.manualVentilationActive)
       const artVal = this.state.art
         ? generateArterialSample(t, this.state.hr, this.state.art.sys, this.state.art.dia)
@@ -330,7 +330,7 @@ export class SimulationEngine {
       this.state.spo2Buffer[this.state.bufferWritePos] =
         generateSpO2Sample(t, this.state.hr, this.state.spo2)
       this.state.etco2Buffer[this.state.bufferWritePos] =
-        generateETCO2Sample(t, this.state.rr, this.state.etco2, false)
+        generateETCO2Sample(t, this.state.rr, this.state.etco2, this.state.capnographyShape)
       this.state.respBuffer[this.state.bufferWritePos] =
         generateRespSample(t, this.state.rr, this.state.manualVentilationActive)
       this.state.artBuffer[this.state.bufferWritePos] = this.state.art

@@ -88,6 +88,7 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
     if (snap.temp !== undefined) target.temp = snap.temp
     if (snap.nibp) target.nibp = { ...snap.nibp }
     if (snap.ecgRhythm !== undefined) target.ecgRhythm = snap.ecgRhythm
+    if (snap.capnographyShape !== undefined) target.capnographyShape = snap.capnographyShape
     if (snap.tubePosition !== undefined) target.tubePosition = snap.tubePosition
     if (snap.fio2 !== undefined) target.fio2 = snap.fio2
     if (snap.sevoflurane !== undefined) target.sevoflurane = snap.sevoflurane

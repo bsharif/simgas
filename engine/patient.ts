@@ -1,5 +1,6 @@
 export type EcgRhythm = 'sinus' | 'vf' | 'vt' | 'asystole' | 'svt'
 export type Consciousness = 'awake' | 'sedated' | 'unconscious'
+export type CapnographyShape = 'normal' | 'bronchospasm' | 'absent'
 
 /**
  * Where the endotracheal tube is currently sitting.
@@ -59,6 +60,7 @@ export interface PatientState {
   manualVentilationActive: boolean
   consciousness: Consciousness
   ecgRhythm: EcgRhythm
+  capnographyShape: CapnographyShape
   tubePosition: TubePosition
   ecgBuffer: Float32Array
   spo2Buffer: Float32Array
@@ -108,6 +110,7 @@ export function createBaselineState(): PatientState {
     manualVentilationActive: false,
     consciousness: 'awake',
     ecgRhythm: 'sinus',
+    capnographyShape: 'normal',
     tubePosition: 'trachea',
     ecgBuffer: new Float32Array(BUFFER_SIZE),
     spo2Buffer: new Float32Array(BUFFER_SIZE),

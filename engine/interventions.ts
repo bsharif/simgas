@@ -1,4 +1,4 @@
-import type { PatientState, DriftBaseline, TubePosition, ArterialReading } from './patient'
+import type { PatientState, DriftBaseline, TubePosition, ArterialReading, CapnographyShape } from './patient'
 
 export type InterventionCategory = 'drug' | 'airway' | 'ventilation' | 'procedure'
 
@@ -24,6 +24,7 @@ export interface PatientModifier {
   manualVentilationActive?: boolean
   ecgRhythm?: string
   consciousness?: string
+  capnographyShape?: CapnographyShape
   tubePosition?: TubePosition
   /** Insert / remove invasive monitoring. null clears the reading. */
   art?: ArterialReading | null
@@ -111,6 +112,7 @@ export function applyModifier(state: PatientState, mod: PatientModifier): void {
   if (mod.manualVentilationActive !== undefined) state.manualVentilationActive = mod.manualVentilationActive
   if (mod.ecgRhythm !== undefined) state.ecgRhythm = mod.ecgRhythm as PatientState['ecgRhythm']
   if (mod.consciousness !== undefined) state.consciousness = mod.consciousness as PatientState['consciousness']
+  if (mod.capnographyShape !== undefined) state.capnographyShape = mod.capnographyShape
   if (mod.tubePosition !== undefined) state.tubePosition = mod.tubePosition
   if (mod.art !== undefined) state.art = mod.art === null ? null : { ...mod.art }
   if (mod.cvp !== undefined) state.cvp = mod.cvp

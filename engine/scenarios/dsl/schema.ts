@@ -38,6 +38,7 @@ const BaselineSchema = z
  */
 const SnapSchema = BaselineSchema.extend({
   ecgRhythm: z.enum(['sinus', 'vf', 'vt', 'asystole', 'svt']).optional(),
+  capnographyShape: z.enum(['normal', 'bronchospasm', 'absent']).optional(),
   tubePosition: z.enum(['none', 'trachea', 'oesophagus']).optional(),
   fio2: z.number().optional(),
   sevoflurane: z.number().optional(),

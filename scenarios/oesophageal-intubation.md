@@ -22,6 +22,7 @@ initial_baseline:
 
 phases:
   - id: onset
+    snap: { capnographyShape: absent }
     baseline:
       etco2: 0.2
       spo2: 80
@@ -32,6 +33,7 @@ phases:
 
   - id: untreated
     enter_when: "tube_position != 'trachea' && time > 5"
+    snap: { capnographyShape: absent }
     baseline:
       etco2: 0.2
       spo2: 65
@@ -50,6 +52,7 @@ phases:
 
   - id: recovery
     enter_when: "tube_position == 'trachea'"
+    snap: { capnographyShape: normal }
     baseline:
       etco2: 5.0
       spo2: 99

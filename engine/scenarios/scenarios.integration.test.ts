@@ -31,11 +31,19 @@ function applyScenarioStep(
 }
 
 describe('scenario loader', () => {
-  it('loads all three migrated scenarios', () => {
+  it('loads all scenarios', () => {
     expect(ALL_SCENARIOS.map(s => s.id).sort()).toEqual([
       'anaphylaxis',
+      'bronchospasm',
+      'haemorrhagic-shock',
+      'high-spinal',
+      'laryngospasm',
+      'last',
       'malignant-hyperthermia',
       'oesophageal-intubation',
+      'svt',
+      'tension-pneumothorax',
+      'vf-cardiac-arrest',
     ])
   })
 
