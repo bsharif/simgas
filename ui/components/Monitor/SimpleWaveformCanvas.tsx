@@ -1,17 +1,17 @@
 import { useRef, useCallback, type FC } from 'react'
 import { useCanvasRenderer } from '../../hooks/useCanvasRenderer'
-import type { SimulationEngine } from '../../../engine/physiology'
 import type { WaveformBufferKey } from '../../../engine/patient'
+import type { WaveformSource } from './waveformSource'
 
 interface SimpleWaveformProps {
-  engine: SimulationEngine
+  waveformSource: WaveformSource
   bufferKey: WaveformBufferKey
   color: string
   label?: string
   value?: string
 }
 
-const SimpleWaveformCanvas: FC<SimpleWaveformProps> = ({ engine, bufferKey, color, label, value }) => {
+const SimpleWaveformCanvas: FC<SimpleWaveformProps> = ({ waveformSource, bufferKey, color, label, value }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const draw = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -50,8 +50,8 @@ const SimpleWaveformCanvas: FC<SimpleWaveformProps> = ({ engine, bufferKey, colo
     ctx.lineWidth = 2
     ctx.beginPath()
 
-    const buffer = engine.state[bufferKey]
-    const bufferWritePos = engine.state.bufferWritePos
+    const buffer = waveformSource.state[bufferKey]
+    const bufferWritePos = waveformSource.state.bufferWritePos
 
     const visibleSamples = Math.min(buffer.length, Math.floor(w * 2))
     const midY = h / 2
@@ -79,7 +79,7 @@ const SimpleWaveformCanvas: FC<SimpleWaveformProps> = ({ engine, bufferKey, colo
       ctx.font = 'bold 20px monospace'
       ctx.fillText(value, 6, 34)
     }
-  }, [engine, bufferKey, color, label, value])
+  }, [waveformSource, bufferKey, color, label, value])
 
   useCanvasRenderer(canvasRef, draw, true)
 

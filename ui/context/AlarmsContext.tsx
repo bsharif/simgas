@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, type ReactNode } from 'react'
 import { useAlarms } from '../hooks/useAlarms'
-import { useSimulation } from './SimulationContext'
+import { useSimulationBridge } from './SimulationBridge'
 import { useMonitorLayout } from './MonitorLayoutContext'
 
 type AlarmsValue = ReturnType<typeof useAlarms>
@@ -14,9 +14,9 @@ const AlarmsContext = createContext<AlarmsValue | null>(null)
  * and one beep scheduler.
  */
 export function AlarmsProvider({ children }: { children: ReactNode }) {
-  const { state, engine } = useSimulation()
+  const { state, audioSource } = useSimulationBridge()
   const { layout } = useMonitorLayout()
-  const alarms = useAlarms(state, layout.numerics, engine)
+  const alarms = useAlarms(state, layout.numerics, audioSource)
   return <AlarmsContext.Provider value={alarms}>{children}</AlarmsContext.Provider>
 }
 

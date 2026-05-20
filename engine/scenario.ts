@@ -30,6 +30,15 @@ export interface Scenario {
    * per-run state. The TS-defined scenarios are stateless and don't need this.
    */
   reset?: () => void
+  getRuntimeInfo?: () => ScenarioRuntimeInfo
+  forcePhase?: (phaseId: string) => boolean
+  clearForcedPhase?: () => void
+}
+
+export interface ScenarioRuntimeInfo {
+  currentPhaseId: string | null
+  completedPhaseIds: string[]
+  forcedPhaseId: string | null
 }
 
 export interface ScenarioUpdate {

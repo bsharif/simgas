@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, type FC } from 'react'
 import { INTERVENTIONS } from '../../../engine/interventions'
-import { useSimulation } from '../../context/SimulationContext'
+import { useSimulationBridge } from '../../context/SimulationBridge'
 import type { Intervention, InterventionCategory } from '../../../engine/interventions'
 import type { PatientState } from '../../../engine/patient'
 import type { DoseEntry } from '../../../engine/doseLedger'
@@ -143,7 +143,7 @@ const machineControls: MachineControlSpec[] = [
 ]
 
 function MachinePanel() {
-  const { state, updateMachineSettings, setManualVentilation } = useSimulation()
+  const { state, updateMachineSettings, setManualVentilation } = useSimulationBridge()
   const isManual = state.ventilationMode === 'manual'
 
   return (
@@ -248,7 +248,7 @@ function describeCooldown(
 }
 
 const RightPanel: FC = () => {
-  const { applyIntervention, eventLog, doseLedger, elapsedSeconds, phase } = useSimulation()
+  const { applyIntervention, eventLog, doseLedger, elapsedSeconds, phase } = useSimulationBridge()
   const [activeTab, setActiveTab] = useState<TabId>('drug')
   const [cooldownTick, setCooldownTick] = useState(0)
   const logRef = useRef<HTMLDivElement>(null)
