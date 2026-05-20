@@ -45,6 +45,11 @@ export class SimulationEngine {
     this.activeScenario = scenario
     this._paused = false
     if (scenario.reset) scenario.reset()
+    // Apply initial modifiers eagerly so the prefill uses the correct starting state.
+    // The tick loop checks appliedScenarioModifiers and will skip re-applying them.
+    applyModifier(this.state, scenario.initialModifiers)
+    this.appliedScenarioModifiers = true
+    this.prefillBuffers()
     this.setPhase('running')
     this.broadcastDoseLedger()
 
@@ -314,6 +319,26 @@ export class SimulationEngine {
     }
 
     this.rafId = requestAnimationFrame(this.tick)
+  }
+
+  private prefillBuffers(): void {
+    const dt = 1 / (60 * SAMPLES_PER_TICK)
+    for (let i = 0; i < BUFFER_SIZE; i++) {
+      const t = i * dt
+      this.state.ecgBuffer[this.state.bufferWritePos] =
+        generateECGSample(t, this.state.hr, this.state.ecgRhythm)
+      this.state.spo2Buffer[this.state.bufferWritePos] =
+        generateSpO2Sample(t, this.state.hr, this.state.spo2)
+      this.state.etco2Buffer[this.state.bufferWritePos] =
+        generateETCO2Sample(t, this.state.rr, this.state.etco2, false)
+      this.state.respBuffer[this.state.bufferWritePos] =
+        generateRespSample(t, this.state.rr, this.state.manualVentilationActive)
+      this.state.artBuffer[this.state.bufferWritePos] = this.state.art
+        ? generateArterialSample(t, this.state.hr, this.state.art.sys, this.state.art.dia)
+        : 0
+      this.state.bufferWritePos = (this.state.bufferWritePos + 1) % BUFFER_SIZE
+    }
+    // bufferWritePos wraps exactly back to 0 after BUFFER_SIZE increments
   }
 
   private broadcastState(): void {
