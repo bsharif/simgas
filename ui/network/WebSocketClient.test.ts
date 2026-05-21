@@ -40,6 +40,8 @@ describe('WebSocketClient', () => {
         clearTimeout: id => clearTimeout(Number(id)),
       })
       client.onMessage(message => received.push(message))
+      const statuses: string[] = []
+      client.onStatusChange(status => statuses.push(status))
 
       client.connect()
       const first = FakeSocket.latest
@@ -59,6 +61,7 @@ describe('WebSocketClient', () => {
       second.onopen?.()
 
       expect(second.sent).toContain(JSON.stringify({ type: 'reconnect', sessionCode: '7K3M9P', token: 'tok_abc' }))
+      expect(statuses).toEqual(['connecting', 'connected', 'disconnected', 'connecting', 'connected'])
     } finally {
       vi.useRealTimers()
     }

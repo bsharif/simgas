@@ -1,4 +1,4 @@
-import { BUFFER_SIZE } from '../../engine/patient'
+import { BUFFER_SIZE, createBaselineState } from '../../engine/patient'
 import {
   generateArterialSample,
   generateECGSample,
@@ -23,6 +23,36 @@ export class RemoteWaveformStore {
         bufferWritePos: 0,
       },
     }
+    // Pre-fill with baseline vitals so the first frame shows waveforms.
+    const baseline = createBaselineState()
+    this.writeSnapshot({
+      hr: baseline.hr,
+      spo2: baseline.spo2,
+      nibp: baseline.nibp,
+      art: null,
+      cvp: null,
+      bis: null,
+      etco2: baseline.etco2,
+      rr: baseline.rr,
+      temp: baseline.temp,
+      fio2: baseline.fio2,
+      vt: baseline.vt,
+      peep: baseline.peep,
+      gasFlow: baseline.gasFlow,
+      sevoflurane: baseline.sevoflurane,
+      ventilationMode: baseline.ventilationMode,
+      manualVentilationActive: false,
+      consciousness: baseline.consciousness,
+      ecgRhythm: baseline.ecgRhythm,
+      capnographyShape: baseline.capnographyShape,
+      tubePosition: baseline.tubePosition,
+      phase: 'idle' as const,
+      elapsedSeconds: 0,
+      paused: false,
+      currentPhaseId: null,
+      completedPhaseIds: [],
+      forcedPhaseId: null,
+    }, BUFFER_SIZE)
   }
 
   writeSnapshot(snapshot: RemotePatientSnapshot, sampleCount = 2): void {

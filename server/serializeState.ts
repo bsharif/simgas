@@ -3,6 +3,7 @@ import type { RemotePatientSnapshot } from '../shared/protocol'
 
 export function serializeState(engine: SimulationEngine): RemotePatientSnapshot {
   const { state } = engine
+  const runtimeInfo = engine.scenario?.getRuntimeInfo?.()
 
   return {
     hr: state.hr,
@@ -27,5 +28,9 @@ export function serializeState(engine: SimulationEngine): RemotePatientSnapshot 
     tubePosition: state.tubePosition,
     phase: engine.phase,
     elapsedSeconds: engine.elapsedSeconds,
+    paused: engine.paused,
+    currentPhaseId: runtimeInfo?.currentPhaseId ?? null,
+    completedPhaseIds: runtimeInfo?.completedPhaseIds ?? [],
+    forcedPhaseId: runtimeInfo?.forcedPhaseId ?? null,
   }
 }

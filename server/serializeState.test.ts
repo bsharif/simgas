@@ -25,6 +25,14 @@ describe('serializeState', () => {
       state,
       phase: 'running',
       elapsedSeconds: 12.5,
+      paused: true,
+      scenario: {
+        getRuntimeInfo: () => ({
+          currentPhaseId: 'recovery',
+          completedPhaseIds: ['onset'],
+          forcedPhaseId: null,
+        }),
+      },
     } as SimulationEngine
 
     const snapshot = serializeState(engine)
@@ -50,6 +58,10 @@ describe('serializeState', () => {
       capnographyShape: 'bronchospasm',
       phase: 'running',
       elapsedSeconds: 12.5,
+      paused: true,
+      currentPhaseId: 'recovery',
+      completedPhaseIds: ['onset'],
+      forcedPhaseId: null,
     })
     expect(snapshot).not.toHaveProperty('ecgBuffer')
     expect(snapshot).not.toHaveProperty('spo2Buffer')

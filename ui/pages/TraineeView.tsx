@@ -8,6 +8,11 @@ const TraineeView: FC<{ onLeave: () => void }> = ({ onLeave }) => {
 
   return (
     <div className="remote-session remote-session--trainee">
+      {connectionStatus === 'disconnected' && (
+        <div className="connection-banner connection-banner--error">
+          Connection lost. Trying to reconnect...
+        </div>
+      )}
       <header className="remote-topbar">
         <strong>SimGas trainee</strong>
         <span>Session {sessionCode ?? 'connecting...'}</span>

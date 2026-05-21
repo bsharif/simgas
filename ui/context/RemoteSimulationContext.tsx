@@ -1,12 +1,12 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { makeDoseLedger, type DoseEntry } from '../../engine/doseLedger'
 import { createBaselineState, type PatientState } from '../../engine/patient'
 import type { Scenario } from '../../engine/scenario'
 import type { SimulationPhase } from '../../engine/physiology'
 import type { ClientMessage, MachineSettingsUpdate, ScenarioMetadataMessage, ServerMessage } from '../../shared/protocol'
 import { RemoteWaveformStore } from '../remote/RemoteWaveformStore'
-import type { WebSocketClient } from '../network/WebSocketClient'
+import type { WebSocketClient, WebSocketConnectionStatus } from '../network/WebSocketClient'
 import { SimulationBridgeProvider, type SimulationBridgeValue } from './SimulationBridge'
 
 interface RemoteSimulationContextValue {
@@ -14,7 +14,11 @@ interface RemoteSimulationContextValue {
   sessionCode: string | null
   roster: Array<{ id: string; name: string; role: 'trainer' | 'trainee' }>
   scenarioMetadata: ScenarioMetadataMessage | null
-  connectionStatus: 'connecting' | 'connected' | 'disconnected'
+  connectionStatus: WebSocketConnectionStatus
+  paused: boolean
+  currentPhaseId: string | null
+  completedPhaseIds: string[]
+  forcedPhaseId: string | null
   send: (message: ClientMessage) => void
 }
 
@@ -55,10 +59,18 @@ export function RemoteSimulationProvider({
   const [sessionCode, setSessionCode] = useState<string | null>(null)
   const [roster, setRoster] = useState<RemoteSimulationContextValue['roster']>([])
   const [scenarioMetadata, setScenarioMetadata] = useState<ScenarioMetadataMessage | null>(null)
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
+  const [connectionStatus, setConnectionStatus] = useState<WebSocketConnectionStatus>('connecting')
+  const [paused, setPaused] = useState(false)
+  const [currentPhaseId, setCurrentPhaseId] = useState<string | null>(null)
+  const [completedPhaseIds, setCompletedPhaseIds] = useState<string[]>([])
+  const [forcedPhaseId, setForcedPhaseId] = useState<string | null>(null)
   const doseLedger = useMemo<ReadonlyMap<string, DoseEntry>>(() => makeDoseLedger(), [])
+  const audioSubscribers = useRef(new Set<(state: PatientState) => void>())
+  const stateRef = useRef(state)
+  const latestElapsedSecondsRef = useRef(0)
 
   useEffect(() => {
+    const unsubscribeStatus = client.onStatusChange(setConnectionStatus)
     client.connect()
     if (initialMessage) client.send(initialMessage)
     const unsubscribe = client.onMessage(message => {
@@ -82,8 +94,16 @@ export function RemoteSimulationProvider({
       if (message.type === 'state') {
         waveformStore.writeSnapshot(message.snapshot)
         setElapsedSeconds(message.snapshot.elapsedSeconds)
+        latestElapsedSecondsRef.current = message.snapshot.elapsedSeconds
         setPhase(message.snapshot.phase)
-        setState(previous => snapshotToState(message, previous))
+        setPaused(message.snapshot.paused)
+        setCurrentPhaseId(message.snapshot.currentPhaseId)
+        setCompletedPhaseIds(message.snapshot.completedPhaseIds)
+        setForcedPhaseId(message.snapshot.forcedPhaseId)
+        const next = snapshotToState(message, stateRef.current)
+        stateRef.current = next
+        setState(next)
+        audioSubscribers.current.forEach(cb => cb(next))
         return
       }
       if (message.type === 'event') {
@@ -100,6 +120,7 @@ export function RemoteSimulationProvider({
     })
     return () => {
       unsubscribe()
+      unsubscribeStatus()
       client.close()
       setConnectionStatus('disconnected')
     }
@@ -107,6 +128,14 @@ export function RemoteSimulationProvider({
 
   const send = useCallback((message: ClientMessage) => client.send(message), [client])
   const scenario = scenarioMetadata ? scenarioFromMetadata(scenarioMetadata) : null
+
+  const audioSource = useMemo(() => ({
+    subscribe: (cb: (state: PatientState) => void) => {
+      audioSubscribers.current.add(cb)
+      return () => { audioSubscribers.current.delete(cb) }
+    },
+    getElapsedSeconds: () => latestElapsedSecondsRef.current,
+  }), [])
 
   const bridgeValue = useMemo<SimulationBridgeValue>(() => ({
     state,
@@ -116,14 +145,26 @@ export function RemoteSimulationProvider({
     eventLog,
     doseLedger,
     waveformSource: waveformStore.source,
+    audioSource,
     applyIntervention: id => send({ type: 'intervene', interventionId: id }),
     updateMachineSettings: (settings: MachineSettingsUpdate) => send({ type: 'update_machine_settings', settings }),
     setManualVentilation: active => send({ type: 'set_manual_ventilation', active }),
     togglePause: () => send({ type: 'pause' }),
-  }), [state, scenario, phase, elapsedSeconds, eventLog, doseLedger, waveformStore, send])
+  }), [state, scenario, phase, elapsedSeconds, eventLog, doseLedger, waveformStore, audioSource, send])
 
   return (
-    <RemoteSimulationContext.Provider value={{ role, sessionCode, roster, scenarioMetadata, connectionStatus, send }}>
+    <RemoteSimulationContext.Provider value={{
+      role,
+      sessionCode,
+      roster,
+      scenarioMetadata,
+      connectionStatus,
+      paused,
+      currentPhaseId,
+      completedPhaseIds,
+      forcedPhaseId,
+      send,
+    }}>
       <SimulationBridgeProvider value={bridgeValue}>{children}</SimulationBridgeProvider>
     </RemoteSimulationContext.Provider>
   )

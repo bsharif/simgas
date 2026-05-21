@@ -31,6 +31,10 @@ export interface RemotePatientSnapshot {
   tubePosition: PatientState['tubePosition']
   phase: SimulationPhase
   elapsedSeconds: number
+  paused: boolean
+  currentPhaseId: string | null
+  completedPhaseIds: string[]
+  forcedPhaseId: string | null
 }
 
 export interface ScenarioMetadataMessage {

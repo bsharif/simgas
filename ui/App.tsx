@@ -22,6 +22,18 @@ interface RemoteSessionState {
 function AppRouter() {
   const [screen, setScreen] = useState<Screen>('lobby')
   const [remoteSession, setRemoteSession] = useState<RemoteSessionState | null>(null)
+  const [initialJoinCode] = useState<string | undefined>(() => {
+    if (typeof window === 'undefined') return undefined
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('join')
+    if (code && /^[A-HJ-NP-Z2-9]{6}$/i.test(code)) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('join')
+      window.history.replaceState({}, '', url.toString())
+      return code.toUpperCase()
+    }
+    return undefined
+  })
 
   if (screen === 'lobby') {
     return (
@@ -35,6 +47,7 @@ function AppRouter() {
           setRemoteSession({ client: new WebSocketClient(), initialMessage: { type: 'join_session', name, sessionCode } })
           setScreen('trainee')
         }}
+        initialSessionCode={initialJoinCode}
       />
     )
   }

@@ -235,6 +235,7 @@ export class SimulationSession {
     if (message.type === 'pause' || message.type === 'resume') {
       if (this.engine && ((message.type === 'pause' && !this.engine.paused) || (message.type === 'resume' && this.engine.paused))) {
         this.engine.togglePause()
+        this.broadcastState(serializeState(this.engine))
       }
       return
     }

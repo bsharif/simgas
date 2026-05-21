@@ -33,6 +33,10 @@ function snapshot(phase: RemotePatientSnapshot['phase'] = 'running'): RemotePati
     tubePosition: state.tubePosition,
     phase,
     elapsedSeconds: 42,
+    paused: false,
+    currentPhaseId: null,
+    completedPhaseIds: [],
+    forcedPhaseId: null,
   }
 }
 
@@ -136,6 +140,29 @@ describe('SimulationSession', () => {
 
     expect(trainer.messages).toContainEqual({ type: 'event', text: 'Event now' })
     expect(trainer.messages).toContainEqual({ type: 'phase_change', phase: 'resolved' })
+  })
+
+  it('broadcasts paused state immediately when pausing and resuming', () => {
+    vi.useFakeTimers()
+    try {
+      const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+      const trainer = collect()
+      const connection = session.connectTrainer(trainer.send)
+
+      session.handleClientMessage(connection.clientId, { type: 'pause' })
+      expect(trainer.messages).toContainEqual({
+        type: 'state',
+        snapshot: expect.objectContaining({ paused: true }),
+      })
+
+      session.handleClientMessage(connection.clientId, { type: 'resume' })
+      expect(trainer.messages).toContainEqual({
+        type: 'state',
+        snapshot: expect.objectContaining({ paused: false }),
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('start_scenario starts an authoritative engine and produces state', () => {

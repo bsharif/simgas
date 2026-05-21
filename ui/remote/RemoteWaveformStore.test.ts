@@ -28,6 +28,10 @@ function snapshot(overrides: Partial<RemotePatientSnapshot> = {}): RemotePatient
     tubePosition: state.tubePosition,
     phase: 'running',
     elapsedSeconds: 1,
+    paused: false,
+    currentPhaseId: null,
+    completedPhaseIds: [],
+    forcedPhaseId: null,
     ...overrides,
   }
 }

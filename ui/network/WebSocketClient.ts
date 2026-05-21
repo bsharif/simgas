@@ -8,6 +8,8 @@ interface WebSocketClientOptions {
 }
 
 type MessageHandler = (message: ServerMessage) => void
+export type WebSocketConnectionStatus = 'connecting' | 'connected' | 'disconnected'
+type StatusHandler = (status: WebSocketConnectionStatus) => void
 
 export class WebSocketClient {
   private url: string
@@ -16,6 +18,7 @@ export class WebSocketClient {
   private clearTimer: (handle: unknown) => void
   private socket: WebSocket | null = null
   private handlers = new Set<MessageHandler>()
+  private statusHandlers = new Set<StatusHandler>()
   private reconnectTimer: unknown = null
   private sessionCode: string | null = null
   private token: string | null = null
@@ -33,9 +36,11 @@ export class WebSocketClient {
   connect(): void {
     this.manuallyClosed = false
     this.isOpen = false
+    this.notifyStatus('connecting')
     this.socket = this.socketFactory(this.url)
     this.socket.onopen = () => {
       this.isOpen = true
+      this.notifyStatus('connected')
       if (this.sessionCode && this.token) {
         this.send({ type: 'reconnect', sessionCode: this.sessionCode, token: this.token })
       }
@@ -53,6 +58,7 @@ export class WebSocketClient {
     }
     this.socket.onclose = () => {
       this.isOpen = false
+      this.notifyStatus('disconnected')
       if (this.manuallyClosed) return
       this.reconnectTimer = this.setTimer(() => this.connect(), 500)
     }
@@ -75,5 +81,14 @@ export class WebSocketClient {
   onMessage(handler: MessageHandler): () => void {
     this.handlers.add(handler)
     return () => this.handlers.delete(handler)
+  }
+
+  onStatusChange(handler: StatusHandler): () => void {
+    this.statusHandlers.add(handler)
+    return () => this.statusHandlers.delete(handler)
+  }
+
+  private notifyStatus(status: WebSocketConnectionStatus): void {
+    for (const handler of this.statusHandlers) handler(status)
   }
 }
