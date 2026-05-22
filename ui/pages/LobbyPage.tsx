@@ -15,26 +15,27 @@ const LobbyPage: FC<LobbyPageProps> = ({ onPracticeSolo, onCreateTrainerSession,
   const [scenarioId, setScenarioId] = useState(ALL_SCENARIOS[0]?.id ?? 'anaphylaxis')
   const trainerCanSubmit = trainerName.trim().length > 0
   const traineeCanSubmit = traineeName.trim().length > 0
+  const codeReady = sessionCode.length === 6
 
   return (
     <main className="lobby-page">
       <section className="lobby-hero">
-        <p className="lobby-eyebrow">SimGas collaboration</p>
-        <h1>Run a monitor simulation solo or with a trainer.</h1>
-        <p>Start a local practice case, host a Railway-backed trainer room, or join as a trainee with a six-character code.</p>
+        <h1>SimGas</h1>
+        <p>Anaesthetic simulation monitor</p>
       </section>
 
       <section className="lobby-grid">
         <article className="lobby-card lobby-card--solo">
           <span className="lobby-card__label">Practice</span>
           <h2>Practice solo</h2>
-          <p>Use the existing local simulator with no network session.</p>
-          <button className="lobby-button" onClick={onPracticeSolo}>Choose scenario</button>
+          <p className="lobby-card__description">Run a local case on this device. No network session.</p>
+          <button className="lobby-button lobby-button--secondary" onClick={onPracticeSolo}>Choose scenario</button>
         </article>
 
         <article className="lobby-card">
           <span className="lobby-card__label">Trainer</span>
-          <h2>Start trainer session</h2>
+          <h2>Host trainer room</h2>
+          <p className="lobby-card__description">Create a shared room and invite trainees with a code.</p>
           <label>
             Display name
             <input value={trainerName} onChange={event => setTrainerName(event.currentTarget.value)} placeholder="Dr Smith" />
@@ -47,27 +48,38 @@ const LobbyPage: FC<LobbyPageProps> = ({ onPracticeSolo, onCreateTrainerSession,
               ))}
             </select>
           </label>
+          <p className="lobby-helper">Creates a six-character join code.</p>
           <button className="lobby-button" disabled={!trainerCanSubmit} onClick={() => onCreateTrainerSession(trainerName.trim(), scenarioId)}>
-            Create trainer room
+            Create room
           </button>
+          {!trainerCanSubmit && <p className="lobby-helper lobby-helper--required">Enter your display name.</p>}
         </article>
 
         <article className="lobby-card">
           <span className="lobby-card__label">Trainee</span>
-          <h2>Join session</h2>
+          <h2>Join as trainee</h2>
+          <p className="lobby-card__description">Join a trainer-led case using a session code.</p>
           <label>
             Display name
             <input value={traineeName} onChange={event => setTraineeName(event.currentTarget.value)} placeholder="John" />
           </label>
           <label>
             Session code
-            <input value={sessionCode} onChange={event => setSessionCode(event.currentTarget.value.toUpperCase())} placeholder="7K3M9P" maxLength={6} />
+            <input value={sessionCode} onChange={event => setSessionCode(event.currentTarget.value.replace(/\s/g, '').toUpperCase())} placeholder="7K3M9P" maxLength={6} />
           </label>
-          <button className="lobby-button" disabled={!traineeCanSubmit || sessionCode.length !== 6} onClick={() => onJoinSession(traineeName.trim(), sessionCode)}>
-            Join as trainee
+          <p className="lobby-helper">{initialSessionCode ? 'Code from invite link loaded.' : 'Enter the trainer code or scan the QR.'}</p>
+          <button className="lobby-button" disabled={!traineeCanSubmit || !codeReady} onClick={() => onJoinSession(traineeName.trim(), sessionCode)}>
+            Join session
           </button>
+          {(!traineeCanSubmit || !codeReady) && (
+            <p className="lobby-helper lobby-helper--required">
+              {!traineeCanSubmit ? 'Enter your display name.' : 'Enter the 6-character code.'}
+            </p>
+          )}
         </article>
       </section>
+
+      <p className="lobby-footer">Educational simulation tool. Not for clinical use.</p>
     </main>
   )
 }
