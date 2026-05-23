@@ -153,6 +153,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     eventLog,
     doseLedger,
     waveformSource: engine,
+    connectionStatus: 'connected',
+    commandsAvailable: true,
     audioSource: {
       subscribe: cb => engine.subscribe(cb),
       getElapsedSeconds: () => engine.elapsedSeconds,

@@ -1,6 +1,7 @@
 import { useRef, useCallback, type FC } from 'react'
 import { useCanvasRenderer } from '../../hooks/useCanvasRenderer'
 import type { WaveformBufferKey } from '../../../engine/patient'
+import { ensureCanvasSize } from './canvasSizing'
 import type { WaveformSource } from './waveformSource'
 
 interface WaveformCanvasProps {
@@ -16,19 +17,7 @@ const ECGCanvas: FC<WaveformCanvasProps> = ({ waveformSource, bufferKey, color, 
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const draw = useCallback((ctx: CanvasRenderingContext2D) => {
-    if (canvasRef.current) {
-      const dpr = window.devicePixelRatio || 1
-      const w = canvasRef.current.clientWidth
-      const h = canvasRef.current.clientHeight
-      if (ctx.canvas.width !== w * dpr || ctx.canvas.height !== h * dpr) {
-        ctx.canvas.width = w * dpr
-        ctx.canvas.height = h * dpr
-        ctx.scale(dpr, dpr)
-      }
-    }
-
-    const w = ctx.canvas.width / (window.devicePixelRatio || 1)
-    const h = ctx.canvas.height / (window.devicePixelRatio || 1)
+    const { width: w, height: h } = ensureCanvasSize(ctx)
 
     ctx.clearRect(0, 0, w, h)
 

@@ -101,6 +101,8 @@ export class SimulationSession {
     const trainee = this.createRecord('trainee', name, send)
     send({ type: 'session_joined', sessionCode: this.code, role: 'trainee', token: trainee.token })
     this.sendSessionInfo(trainee)
+    send({ type: 'event_log_snapshot', events: [...this.eventLog] })
+    if (this.lastSnapshot) send({ type: 'state', snapshot: this.lastSnapshot })
     this.broadcastSessionInfo()
     return { ok: true, clientId: trainee.id, token: trainee.token }
   }

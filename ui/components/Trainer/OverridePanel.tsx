@@ -5,7 +5,7 @@ import { useRemoteSimulation } from '../../context/RemoteSimulationContext'
 const rhythms: EcgRhythm[] = ['sinus', 'svt', 'vt', 'vf', 'asystole']
 
 const OverridePanel: FC = () => {
-  const { send } = useRemoteSimulation()
+  const { send, commandsAvailable } = useRemoteSimulation()
   const [hr, setHr] = useState(80)
   const [spo2, setSpo2] = useState(98)
   const [etco2, setEtco2] = useState(5)
@@ -28,9 +28,10 @@ const OverridePanel: FC = () => {
       <label>Sys <input type="number" value={sys} onChange={event => setSys(Number(event.currentTarget.value))} /></label>
       <label>Dia <input type="number" value={dia} onChange={event => setDia(Number(event.currentTarget.value))} /></label>
       <label>Rhythm <select value={ecgRhythm} onChange={event => setEcgRhythm(event.currentTarget.value as EcgRhythm)}>{rhythms.map(rhythm => <option key={rhythm}>{rhythm}</option>)}</select></label>
-      <button onClick={() => send({ type: 'override', mode: 'set_now', values })}>Set now</button>
-      <button onClick={() => send({ type: 'override', mode: 'set_target', values })}>Set target</button>
-      <button onClick={() => send({ type: 'clear_trainer_overrides' })}>Reset to scenario</button>
+      <button disabled={!commandsAvailable} onClick={() => send({ type: 'override', mode: 'set_now', values })}>Set now</button>
+      <button disabled={!commandsAvailable} onClick={() => send({ type: 'override', mode: 'set_target', values })}>Set target</button>
+      <button disabled={!commandsAvailable} onClick={() => send({ type: 'clear_trainer_overrides' })}>Reset to scenario</button>
+      {!commandsAvailable && <p className="command-unavailable">Trainer commands unavailable while reconnecting.</p>}
     </section>
   )
 }

@@ -10,6 +10,7 @@ interface WebSocketClientOptions {
 type MessageHandler = (message: ServerMessage) => void
 export type WebSocketConnectionStatus = 'connecting' | 'connected' | 'disconnected'
 type StatusHandler = (status: WebSocketConnectionStatus) => void
+const QUEUEABLE_MESSAGE_TYPES = new Set<ClientMessage['type']>(['create_session', 'join_session', 'reconnect'])
 
 export class WebSocketClient {
   private url: string
@@ -70,12 +71,14 @@ export class WebSocketClient {
     this.socket?.close()
   }
 
-  send(message: ClientMessage): void {
+  send(message: ClientMessage): boolean {
     if (!this.socket || !this.isOpen) {
+      if (!QUEUEABLE_MESSAGE_TYPES.has(message.type)) return false
       this.queuedMessages.push(message)
-      return
+      return true
     }
     this.socket.send(JSON.stringify(message))
+    return true
   }
 
   onMessage(handler: MessageHandler): () => void {
