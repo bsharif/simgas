@@ -88,6 +88,19 @@ describe('SimulationSession', () => {
     expect(reconnect.messages[1]).toEqual({ type: 'state', snapshot: snapshot('failed') })
   })
 
+  it('sends the event log and latest state snapshot when a trainee joins an active session', () => {
+    const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+    session.recordEvent('Trainer note')
+    session.broadcastState(snapshot('running'))
+    const trainee = collect()
+
+    const joined = session.joinTrainee('John', trainee.send)
+
+    expect(joined.ok).toBe(true)
+    expect(trainee.messages).toContainEqual({ type: 'event_log_snapshot', events: ['Trainer note'] })
+    expect(trainee.messages).toContainEqual({ type: 'state', snapshot: snapshot('running') })
+  })
+
   it('rejects trainer-only commands from trainees', () => {
     const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
     const trainee = collect()

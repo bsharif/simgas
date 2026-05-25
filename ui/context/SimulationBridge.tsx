@@ -6,6 +6,7 @@ import type { Scenario } from '../../engine/scenario'
 import type { SimulationPhase } from '../../engine/physiology'
 import type { MachineSettingsUpdate } from '../../shared/protocol'
 import type { WaveformSource } from '../components/Monitor/waveformSource'
+import type { WebSocketConnectionStatus } from '../network/WebSocketClient'
 
 export interface SimulationBridgeValue {
   state: PatientState
@@ -15,6 +16,8 @@ export interface SimulationBridgeValue {
   eventLog: string[]
   doseLedger: ReadonlyMap<string, DoseEntry>
   waveformSource: WaveformSource
+  connectionStatus?: WebSocketConnectionStatus
+  commandsAvailable: boolean
   audioSource?: {
     subscribe: (cb: (state: PatientState) => void) => () => void
     getElapsedSeconds: () => number

@@ -174,6 +174,17 @@ body {
   opacity: 0.45;
 }
 
+.command-unavailable {
+  margin: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid #e7c9a6;
+  border-radius: 10px;
+  background: #fff4e6;
+  color: #8a4e16;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .remote-session {
   display: flex;
   flex-direction: column;
@@ -204,8 +215,217 @@ body {
 .trainer-monitor {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding: 10px;
   background: #1f2428;
+}
+
+.trainee-action-tray {
+  display: contents;
+}
+
+.trainee-action-tray__handle {
+  display: none;
+}
+
+.trainee-action-tray__content {
+  display: contents;
+}
+
+.right-panel {
+  width: 50%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #ffffff;
+  border-left: 1px solid #e0ddd5;
+}
+
+.right-panel__tabs {
+  display: flex;
+  flex: 0 0 auto;
+  border-bottom: 1px solid #e0ddd5;
+  background: #fafafa;
+}
+
+.right-panel__tab {
+  flex: 1;
+  min-height: 44px;
+  padding: 12px 6px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: color 0.15s, background 0.15s;
+}
+
+.right-panel__tab--active {
+  border-bottom-color: #1a5276;
+  background: #ffffff;
+  color: #1a5276;
+}
+
+.right-panel__pane {
+  display: none;
+  flex: 1;
+  min-height: 0;
+}
+
+.right-panel__pane--active {
+  display: flex;
+}
+
+.action-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.action-button {
+  position: relative;
+  min-height: 52px;
+  padding: 14px 16px;
+  border: 1px solid #e0ddd5;
+  border-radius: 6px;
+  background: #fafafa;
+  color: #2c2c2c;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1.35;
+  text-align: left;
+  transition: background 0.1s, border-color 0.1s, box-shadow 0.12s, transform 0.12s;
+}
+
+.action-button:hover:not(:disabled) {
+  background: #f0f0e8;
+  border-color: #ccc;
+}
+
+.action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.action-button__badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 1px 6px;
+  border: 1px solid #b9dac8;
+  border-radius: 10px;
+  background: #eaf6f0;
+  color: #1a6e4c;
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.action-button__label {
+  font-weight: 700;
+}
+
+.action-button__description {
+  margin-top: 4px;
+  color: #aaa;
+  font-size: 12px;
+}
+
+.event-log {
+  display: flex;
+  flex: 0 1 30%;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 30%;
+  border-top: 1px solid #e0ddd5;
+}
+
+.event-log__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #ecece5;
+  background: #fafafa;
+  color: #999;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.event-log__toggle {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #d8d4ca;
+  border-radius: 999px;
+  background: #fffdf7;
+  color: #1a5276;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.event-log__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.event-log__empty {
+  padding: 8px;
+  color: #ccc;
+  font-size: 10px;
+  font-style: italic;
+}
+
+.event-log__entry {
+  padding: 2px 12px;
+  border-bottom: 1px solid #f0f0ea;
+  color: #888;
+  font-family: "Courier New", monospace;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.event-log__entry--warning {
+  color: #cc6600;
+}
+
+.event-log__entry--success {
+  color: #1a6e4c;
+}
+
+.event-log__entry--error {
+  color: #cc0000;
+}
+
+.event-log__entry--neutral {
+  color: #999;
+}
+
+.right-panel--compact .event-log--collapsed,
+.right-panel--tray-mode .event-log--collapsed {
+  flex: 0 0 auto;
+  max-height: none;
+}
+
+.right-panel--compact .event-log--collapsed .event-log__body,
+.right-panel--tray-mode .event-log--collapsed .event-log__body {
+  display: none;
 }
 
 .trainer-controls {
@@ -248,6 +468,162 @@ body {
   }
 }
 
+@media (min-width: 700px) and (max-width: 1023px) and (min-height: 481px) {
+  .remote-session--trainee .remote-session__body {
+    flex-direction: column;
+  }
+
+  .remote-session--trainee .remote-session__monitor {
+    flex: 1 1 auto;
+  }
+
+  .remote-session--trainee .trainee-action-tray {
+    display: block;
+    flex: 0 0 min(42vh, 360px);
+    min-height: 260px;
+    border-top: 1px solid #cfc7ba;
+    background: #fff;
+  }
+
+  .remote-session--trainee .trainee-action-tray__handle {
+    display: none;
+  }
+
+  .remote-session--trainee .trainee-action-tray__content {
+    display: block;
+    height: 100%;
+  }
+
+  .remote-session--trainee .right-panel {
+    width: 100%;
+    height: 100%;
+    border-left: 0;
+  }
+
+  .remote-session--trainee .right-panel__tabs {
+    overflow-x: auto;
+  }
+
+  .remote-session--trainee .right-panel__tab {
+    flex: 0 0 142px;
+  }
+
+  .remote-session--trainee .action-grid {
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
+  }
+}
+
+@media (max-width: 699px), (max-width: 899px) and (max-height: 480px) {
+  .remote-session--trainee .remote-topbar {
+    min-height: 44px;
+    padding: 6px 10px;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .remote-session--trainee .remote-topbar button {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+
+  .remote-session--trainee .remote-session__body {
+    position: relative;
+  }
+
+  .remote-session--trainee .remote-session__monitor {
+    padding: 6px;
+  }
+
+  .remote-session--trainee .trainee-action-tray {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 54px);
+    transform: translateY(calc(100% - 54px));
+    border-top: 1px solid #cfc7ba;
+    border-radius: 18px 18px 0 0;
+    background: #fff;
+    box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.26);
+    transition: transform 0.18s ease-out;
+  }
+
+  .remote-session--trainee.remote-session--tray-open .trainee-action-tray {
+    transform: translateY(0);
+  }
+
+  .remote-session--trainee .trainee-action-tray__content {
+    display: flex;
+    min-height: 0;
+  }
+
+  .trainee-action-tray__handle {
+    display: grid;
+    place-items: center;
+    gap: 3px;
+    min-height: 54px;
+    border: 0;
+    border-bottom: 1px solid #e0ddd5;
+    border-radius: 18px 18px 0 0;
+    background: #fffdf7;
+    color: #1a5276;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .trainee-action-tray__handle-grip {
+    width: 52px;
+    height: 5px;
+    border-radius: 999px;
+    background: #c8c1b4;
+  }
+
+  .remote-session--trainee .right-panel {
+    width: 100%;
+    height: min(76vh, 620px);
+    border-left: 0;
+  }
+
+  .remote-session--trainee .right-panel__tabs {
+    overflow-x: auto;
+  }
+
+  .remote-session--trainee .right-panel__tab {
+    flex: 0 0 132px;
+    min-height: 52px;
+    padding: 12px 10px;
+  }
+
+  .remote-session--trainee .action-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .remote-session--trainee .action-button {
+    min-height: 52px;
+    padding: 14px 12px;
+  }
+
+  .remote-session--trainee .drug-action-button {
+    min-height: 104px;
+  }
+
+  .remote-session--trainee .machine-control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .remote-session--trainee .bag-control {
+    min-height: 104px;
+  }
+}
+
 @keyframes alarmPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
@@ -286,7 +662,7 @@ body {
   transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
 }
 
-.drug-action-button:hover {
+.drug-action-button:hover:not(:disabled) {
   background: #ffffff;
   border-color: #a9a397;
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
@@ -423,6 +799,7 @@ body {
 }
 
 .machine-mode__button {
+  min-height: 44px;
   padding: 11px 12px;
   border: 1px solid #c8c1b4;
   border-radius: 7px;
@@ -514,6 +891,7 @@ body {
 .machine-control input[type="range"] {
   grid-column: 1 / -1;
   width: 100%;
+  min-height: 44px;
   accent-color: #1d83a6;
 }
 

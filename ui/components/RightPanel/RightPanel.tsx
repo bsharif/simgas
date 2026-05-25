@@ -1,11 +1,23 @@
-import { useState, useRef, useEffect, type FC } from 'react'
+import { useState, useRef, useEffect, useId, type FC, type KeyboardEvent } from 'react'
 import { INTERVENTIONS } from '../../../engine/interventions'
 import { useSimulationBridge } from '../../context/SimulationBridge'
 import type { Intervention, InterventionCategory } from '../../../engine/interventions'
 import type { PatientState } from '../../../engine/patient'
 import type { DoseEntry } from '../../../engine/doseLedger'
+import {
+  initialManualVentilationReleaseState,
+  manualVentilationCommandsAvailable,
+  manualVentilationCommandsUnavailable,
+  manualVentilationPointerDown,
+  manualVentilationPointerRelease,
+} from './manualVentilationRelease'
 
 type TabId = 'drug' | 'airway' | 'ventilation' | 'procedure' | 'machine'
+
+interface RightPanelProps {
+  compact?: boolean
+  trayMode?: boolean
+}
 
 const tabs: { id: TabId; label: string }[] = [
   { id: 'drug', label: 'Drugs' },
@@ -143,8 +155,24 @@ const machineControls: MachineControlSpec[] = [
 ]
 
 function MachinePanel() {
-  const { state, updateMachineSettings, setManualVentilation } = useSimulationBridge()
+  const { state, updateMachineSettings, setManualVentilation, commandsAvailable } = useSimulationBridge()
   const isManual = state.ventilationMode === 'manual'
+  const manualVentilationReleaseRef = useRef(initialManualVentilationReleaseState)
+
+  useEffect(() => {
+    const next = commandsAvailable
+      ? manualVentilationCommandsAvailable(manualVentilationReleaseRef.current)
+      : manualVentilationCommandsUnavailable(manualVentilationReleaseRef.current)
+    manualVentilationReleaseRef.current = next.state
+    if (next.command !== null) setManualVentilation(next.command)
+  }, [commandsAvailable, setManualVentilation])
+
+  const releaseManualVentilation = (commandsAvailableNow: boolean): boolean => {
+    const next = manualVentilationPointerRelease(manualVentilationReleaseRef.current, commandsAvailableNow)
+    manualVentilationReleaseRef.current = next.state
+    if (next.command !== null) setManualVentilation(next.command)
+    return next.command !== null
+  }
 
   return (
     <div className="machine-panel">
@@ -169,12 +197,14 @@ function MachinePanel() {
       <div className="machine-mode">
         <button
           className={!isManual ? 'machine-mode__button machine-mode__button--active' : 'machine-mode__button'}
+          disabled={!commandsAvailable}
           onClick={() => updateMachineSettings({ ventilationMode: 'ventilator' })}
         >
           Ventilator
         </button>
         <button
           className={isManual ? 'machine-mode__button machine-mode__button--active' : 'machine-mode__button'}
+          disabled={!commandsAvailable}
           onClick={() => updateMachineSettings({ ventilationMode: 'manual' })}
         >
           Manual
@@ -197,6 +227,7 @@ function MachinePanel() {
                 max={control.max}
                 step={control.step}
                 value={sliderValue}
+                disabled={!commandsAvailable}
                 onChange={event => {
                   const rawValue = Number(event.currentTarget.value)
                   const nextValue = control.toState ? control.toState(rawValue) : rawValue
@@ -211,16 +242,21 @@ function MachinePanel() {
         <div className="manual-ventilator">
           <button
             className={state.manualVentilationActive ? 'bag-control bag-control--active' : 'bag-control'}
+            disabled={!commandsAvailable}
             onPointerDown={event => {
-              event.currentTarget.setPointerCapture(event.pointerId)
-              setManualVentilation(true)
+              const next = manualVentilationPointerDown(manualVentilationReleaseRef.current, commandsAvailable)
+              manualVentilationReleaseRef.current = next.state
+              if (next.command !== null) {
+                event.currentTarget.setPointerCapture(event.pointerId)
+                setManualVentilation(next.command)
+              }
             }}
             onPointerUp={event => {
-              event.currentTarget.releasePointerCapture(event.pointerId)
-              setManualVentilation(false)
+              const released = releaseManualVentilation(commandsAvailable)
+              if (released) event.currentTarget.releasePointerCapture(event.pointerId)
             }}
-            onPointerCancel={() => setManualVentilation(false)}
-            onPointerLeave={() => setManualVentilation(false)}
+            onPointerCancel={() => releaseManualVentilation(commandsAvailable)}
+            onPointerLeave={() => releaseManualVentilation(commandsAvailable)}
           >
             <span className="bag-control__mask" />
             <span className="bag-control__neck" />
@@ -229,6 +265,7 @@ function MachinePanel() {
           </button>
         </div>
       )}
+      {!commandsAvailable && <p className="command-unavailable">Commands unavailable while reconnecting.</p>}
     </div>
   )
 }
@@ -247,11 +284,23 @@ function describeCooldown(
   return { onCooldown: remaining > 0, remainingSec: remaining / 1000, maxedOut: false }
 }
 
-const RightPanel: FC = () => {
-  const { applyIntervention, eventLog, doseLedger, elapsedSeconds, phase } = useSimulationBridge()
+function eventLogEntryClassName(event: string): string {
+  if (event.startsWith('⚠')) return 'event-log__entry event-log__entry--warning'
+  if (event.startsWith('✓') || event.startsWith('→')) return 'event-log__entry event-log__entry--success'
+  if (event.startsWith('✗') || event.startsWith('❌')) return 'event-log__entry event-log__entry--error'
+  if (event.startsWith('▶')) return 'event-log__entry event-log__entry--neutral'
+  return 'event-log__entry'
+}
+
+const RightPanel: FC<RightPanelProps> = ({ compact = false, trayMode = false }) => {
+  const { applyIntervention, eventLog, doseLedger, elapsedSeconds, phase, commandsAvailable } = useSimulationBridge()
   const [activeTab, setActiveTab] = useState<TabId>('drug')
   const [cooldownTick, setCooldownTick] = useState(0)
+  const [eventLogCollapsed, setEventLogCollapsed] = useState(compact || trayMode)
   const logRef = useRef<HTMLDivElement>(null)
+  const tabRefs = useRef<Partial<Record<TabId, HTMLButtonElement | null>>>({})
+  const eventLogToggleVisible = compact || trayMode
+  const idPrefix = useId()
 
   // Tick at 5 Hz while running so cooldown timers count down smoothly without
   // tying every button to the simulation state.
@@ -267,195 +316,174 @@ const RightPanel: FC = () => {
     }
   }, [eventLog])
 
-  const items = activeTab === 'machine'
-    ? []
-    : INTERVENTIONS.filter(i => i.category === activeTab as InterventionCategory)
+  const panelClassName = [
+    'right-panel',
+    compact ? 'right-panel--compact' : null,
+    trayMode ? 'right-panel--tray-mode' : null,
+  ].filter(Boolean).join(' ')
+
+  const focusTab = (tabId: TabId) => {
+    setActiveTab(tabId)
+    tabRefs.current[tabId]?.focus()
+  }
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tabId: TabId) => {
+    const currentIndex = tabs.findIndex(tab => tab.id === tabId)
+    let nextIndex: number | null = null
+
+    if (event.key === 'ArrowLeft') nextIndex = (currentIndex + tabs.length - 1) % tabs.length
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length
+    if (event.key === 'Home') nextIndex = 0
+    if (event.key === 'End') nextIndex = tabs.length - 1
+
+    if (nextIndex === null) return
+
+    event.preventDefault()
+    focusTab(tabs[nextIndex].id)
+  }
 
   return (
-    <div style={{
-      width: '50%',
-      display: 'flex',
-      flexDirection: 'column',
-      background: '#ffffff',
-      borderLeft: '1px solid #e0ddd5',
-    }}>
-      <div style={{
-        display: 'flex',
-        borderBottom: '1px solid #e0ddd5',
-        background: '#fafafa',
-      }}>
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={{
-              flex: 1,
-              padding: '12px 6px',
-              border: 'none',
-              borderBottom: activeTab === tab.id ? '2px solid #1a5276' : '2px solid transparent',
-              background: activeTab === tab.id ? '#ffffff' : 'transparent',
-              color: activeTab === tab.id ? '#1a5276' : '#999',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: 1,
-              transition: 'color 0.15s, background 0.15s',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === 'machine' ? (
-        <MachinePanel />
-      ) : (
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: 8,
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 6,
-        alignContent: 'start',
-      }}>
-        {items.map(item => {
-          const entry = doseLedger.get(item.id)
-          const { onCooldown, remainingSec, maxedOut } = describeCooldown(item, entry, elapsedSeconds)
-          // Reference cooldownTick so React re-renders this row on each tick.
-          void cooldownTick
-          const disabled = onCooldown || maxedOut
-          const badge = entry ? `× ${entry.count}` : null
-          const subtitle = maxedOut
-            ? `Max ${item.maxDoses} doses reached`
-            : onCooldown
-              ? `Cooldown ${remainingSec.toFixed(0)}s`
-              : item.description
+    <div className={panelClassName}>
+      <div className="right-panel__tabs" role="tablist">
+        {tabs.map(tab => {
+          const tabActive = activeTab === tab.id
 
           return (
-          <button
-            key={item.id}
-            onClick={() => applyIntervention(item.id)}
-            disabled={disabled}
-            className={activeTab === 'drug' ? 'drug-action-button' : undefined}
-            style={activeTab === 'drug' ? {
-              opacity: disabled ? 0.45 : 1,
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              position: 'relative',
-            } : {
-              padding: '14px 16px',
-              border: '1px solid #e0ddd5',
-              borderRadius: 6,
-              background: '#fafafa',
-              color: '#2c2c2c',
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              fontSize: 15,
-              textAlign: 'left',
-              lineHeight: 1.35,
-              transition: 'background 0.1s, border-color 0.1s',
-              opacity: disabled ? 0.45 : 1,
-              position: 'relative',
-            }}
-            onMouseEnter={e => {
-              if (activeTab === 'drug' || disabled) return
-              e.currentTarget.style.background = '#f0f0e8'
-              e.currentTarget.style.borderColor = '#ccc'
-            }}
-            onMouseLeave={e => {
-              if (activeTab === 'drug') return
-              e.currentTarget.style.background = '#fafafa'
-              e.currentTarget.style.borderColor = '#e0ddd5'
-            }}
-          >
-            {badge && (
-              <span style={{
-                position: 'absolute',
-                top: 4,
-                right: 6,
-                fontSize: 10,
-                fontWeight: 700,
-                color: '#1a6e4c',
-                background: '#eaf6f0',
-                border: '1px solid #b9dac8',
-                borderRadius: 10,
-                padding: '1px 6px',
-                pointerEvents: 'none',
-              }}>
-                {badge}
-              </span>
-            )}
-            {activeTab === 'drug' && syringeLabels[item.id] ? (
-              <>
-                <div className={`syringe-label ${syringeLabels[item.id].className}`}>
-                  <div className="syringe-label__name">{syringeLabels[item.id].drugName}</div>
-                  <div className="syringe-label__dose">
-                    <span />
-                    <strong>{syringeLabels[item.id].dose}</strong>
-                  </div>
-                </div>
-                <div className="drug-action-button__description">{subtitle}</div>
-              </>
-            ) : (
-              <>
-                <div>{item.label}</div>
-                <div style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>
-                  {subtitle}
-                </div>
-              </>
-            )}
-          </button>
+            <button
+              key={tab.id}
+              id={`${idPrefix}-${tab.id}-tab`}
+              type="button"
+              role="tab"
+              aria-selected={tabActive}
+              aria-controls={`${idPrefix}-${tab.id}-panel`}
+              tabIndex={tabActive ? 0 : -1}
+              ref={element => {
+                tabRefs.current[tab.id] = element
+              }}
+              onClick={() => setActiveTab(tab.id)}
+              onKeyDown={event => handleTabKeyDown(event, tab.id)}
+              className={tabActive ? 'right-panel__tab right-panel__tab--active' : 'right-panel__tab'}
+            >
+              {tab.label}
+            </button>
           )
         })}
       </div>
+
+      {tabs.map(tab => {
+        const tabActive = activeTab === tab.id
+        const paneClassName = tabActive ? 'right-panel__pane right-panel__pane--active' : 'right-panel__pane'
+
+        if (tab.id === 'machine') {
+          return (
+            <div
+              key={tab.id}
+              id={`${idPrefix}-${tab.id}-panel`}
+              role="tabpanel"
+              aria-labelledby={`${idPrefix}-${tab.id}-tab`}
+              className={paneClassName}
+              aria-hidden={!tabActive}
+            >
+              <MachinePanel />
+            </div>
+          )
+        }
+
+        const items = INTERVENTIONS.filter(i => i.category === tab.id as InterventionCategory)
+        const gridClassName = tab.id === 'drug' ? 'action-grid action-grid--drugs' : 'action-grid'
+
+        return (
+          <div
+            key={tab.id}
+            id={`${idPrefix}-${tab.id}-panel`}
+            role="tabpanel"
+            aria-labelledby={`${idPrefix}-${tab.id}-tab`}
+            className={paneClassName}
+            aria-hidden={!tabActive}
+          >
+            <div className={gridClassName}>
+              {items.map(item => {
+                const entry = doseLedger.get(item.id)
+                const { onCooldown, remainingSec, maxedOut } = describeCooldown(item, entry, elapsedSeconds)
+                // Reference cooldownTick so React re-renders this row on each tick.
+                void cooldownTick
+                const disabled = onCooldown || maxedOut || !commandsAvailable
+                const badge = entry ? `× ${entry.count}` : null
+                const subtitle = maxedOut
+                  ? `Max ${item.maxDoses} doses reached`
+                  : onCooldown
+                    ? `Cooldown ${remainingSec.toFixed(0)}s`
+                    : item.description
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => applyIntervention(item.id)}
+                    disabled={disabled}
+                    className={tab.id === 'drug' ? 'action-button drug-action-button' : 'action-button'}
+                  >
+                    {badge && (
+                      <span className="action-button__badge">
+                        {badge}
+                      </span>
+                    )}
+                    {tab.id === 'drug' && syringeLabels[item.id] ? (
+                      <>
+                        <div className={`syringe-label ${syringeLabels[item.id].className}`}>
+                          <div className="syringe-label__name">{syringeLabels[item.id].drugName}</div>
+                          <div className="syringe-label__dose">
+                            <span />
+                            <strong>{syringeLabels[item.id].dose}</strong>
+                          </div>
+                        </div>
+                        <div className="drug-action-button__description">{subtitle}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="action-button__label">{item.label}</div>
+                        <div className="action-button__description">
+                          {subtitle}
+                        </div>
+                      </>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+      {activeTab !== 'machine' && !commandsAvailable && (
+        <p className="command-unavailable">Commands unavailable while reconnecting.</p>
       )}
 
-      <div style={{
-        borderTop: '1px solid #e0ddd5',
-        display: 'flex',
-        flexDirection: 'column',
-        maxHeight: '30%',
-      }}>
-        <div style={{
-          padding: '6px 12px',
-          fontSize: 10,
-          color: '#999',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: 1,
-          borderBottom: '1px solid #ecece5',
-          background: '#fafafa',
-        }}>
-          Event Log
+      <div className={eventLogCollapsed ? 'event-log event-log--collapsed' : 'event-log'}>
+        <div className="event-log__header">
+          <span>Event Log</span>
+          {eventLogToggleVisible && (
+            <button
+              type="button"
+              className="event-log__toggle"
+              aria-expanded={!eventLogCollapsed}
+              onClick={() => setEventLogCollapsed(collapsed => !collapsed)}
+            >
+              Events {eventLog.length > 0 ? `(${eventLog.length})` : ''}
+            </button>
+          )}
         </div>
         <div
           ref={logRef}
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '2px 0',
-          }}
+          className="event-log__body"
         >
           {eventLog.length === 0 && (
-            <div style={{ padding: 8, color: '#ccc', fontSize: 10, fontStyle: 'italic' }}>
+            <div className="event-log__empty">
               No events yet.
             </div>
           )}
           {eventLog.map((event, i) => (
             <div
               key={i}
-              style={{
-                padding: '2px 12px',
-                fontSize: 10,
-                color: event.startsWith('⚠') ? '#cc6600'
-                     : event.startsWith('✓') || event.startsWith('→') ? '#1a6e4c'
-                     : event.startsWith('✗') || event.startsWith('❌') ? '#cc0000'
-                     : event.startsWith('▶') ? '#999'
-                     : '#888',
-                fontFamily: '"Courier New", monospace',
-                lineHeight: 1.5,
-                borderBottom: '1px solid #f0f0ea',
-              }}
+              className={eventLogEntryClassName(event)}
             >
               {event}
             </div>

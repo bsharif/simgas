@@ -9,7 +9,7 @@ import EventInjector from '../components/Trainer/EventInjector'
 import TraineeRoster from '../components/Trainer/TraineeRoster'
 
 const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
-  const { sessionCode, roster, send, connectionStatus, paused } = useRemoteSimulation()
+  const { sessionCode, roster, send, connectionStatus, commandsAvailable, paused } = useRemoteSimulation()
   const { phase } = useSimulationBridge()
   const traineeCount = roster.filter(entry => entry.role === 'trainee').length
   const inviteUrl = sessionCode ? `${window.location.origin}?join=${sessionCode}` : ''
@@ -49,9 +49,9 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
         </span>
         <span>{traineeCount} trainees</span>
         <button onClick={() => navigator.clipboard?.writeText(inviteUrl)}>Copy invite</button>
-        <button onClick={() => send({ type: 'pause' })} disabled={!isRunning || paused}>Pause</button>
-        <button onClick={() => send({ type: 'resume' })} disabled={!isRunning || !paused}>Resume</button>
-        <button onClick={() => { send({ type: 'end_session' }); onEnd() }}>End</button>
+        <button onClick={() => send({ type: 'pause' })} disabled={!commandsAvailable || !isRunning || paused}>Pause</button>
+        <button onClick={() => send({ type: 'resume' })} disabled={!commandsAvailable || !isRunning || !paused}>Resume</button>
+        <button onClick={() => { if (send({ type: 'end_session' })) onEnd() }} disabled={!commandsAvailable}>End</button>
       </header>
       <div className="trainer-layout">
         <div className="trainer-monitor"><Monitor /></div>

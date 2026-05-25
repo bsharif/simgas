@@ -4,7 +4,7 @@ import { makeDoseLedger, type DoseEntry } from '../../engine/doseLedger'
 import { createBaselineState, type PatientState } from '../../engine/patient'
 import type { Scenario } from '../../engine/scenario'
 import type { SimulationPhase } from '../../engine/physiology'
-import type { ClientMessage, MachineSettingsUpdate, ScenarioMetadataMessage, ServerMessage } from '../../shared/protocol'
+import type { ClientMessage, MachineSettingsUpdate, RemotePatientSnapshot, ScenarioMetadataMessage, ServerMessage } from '../../shared/protocol'
 import { RemoteWaveformStore } from '../remote/RemoteWaveformStore'
 import type { WebSocketClient, WebSocketConnectionStatus } from '../network/WebSocketClient'
 import { SimulationBridgeProvider, type SimulationBridgeValue } from './SimulationBridge'
@@ -19,7 +19,8 @@ interface RemoteSimulationContextValue {
   currentPhaseId: string | null
   completedPhaseIds: string[]
   forcedPhaseId: string | null
-  send: (message: ClientMessage) => void
+  commandsAvailable: boolean
+  send: (message: ClientMessage) => boolean
 }
 
 const RemoteSimulationContext = createContext<RemoteSimulationContextValue | null>(null)
@@ -45,6 +46,38 @@ function scenarioFromMetadata(metadata: ScenarioMetadataMessage): Scenario {
   }
 }
 
+export function shouldResetRemoteWaveforms(
+  previousPhase: SimulationPhase,
+  snapshot: Pick<RemotePatientSnapshot, 'phase' | 'elapsedSeconds'>,
+  pendingRunStart = false,
+): boolean {
+  return (pendingRunStart || previousPhase !== 'running')
+    && snapshot.phase === 'running'
+    && snapshot.elapsedSeconds <= 1
+}
+
+type RemoteStateApplication = 'reject' | 'reset' | 'write' | 'skip-waveforms'
+
+export function getRemoteStateApplication({
+  latestElapsedSeconds,
+  hasReceivedState,
+  previousPhase,
+  pendingRunStart,
+  snapshot,
+}: {
+  latestElapsedSeconds: number
+  hasReceivedState: boolean
+  previousPhase: SimulationPhase
+  pendingRunStart: boolean
+  snapshot: Pick<RemotePatientSnapshot, 'phase' | 'elapsedSeconds'>
+}): RemoteStateApplication {
+  if (snapshot.elapsedSeconds < latestElapsedSeconds) return 'reject'
+  if (!hasReceivedState) return 'reset'
+  if (shouldResetRemoteWaveforms(previousPhase, snapshot, pendingRunStart)) return 'reset'
+  if (snapshot.elapsedSeconds === latestElapsedSeconds) return 'skip-waveforms'
+  return 'write'
+}
+
 export function RemoteSimulationProvider({
   client,
   initialMessage,
@@ -68,6 +101,9 @@ export function RemoteSimulationProvider({
   const audioSubscribers = useRef(new Set<(state: PatientState) => void>())
   const stateRef = useRef(state)
   const latestElapsedSecondsRef = useRef(0)
+  const phaseRef = useRef<SimulationPhase>('idle')
+  const resetWaveformsOnNextStateRef = useRef(false)
+  const hasReceivedStateRef = useRef(false)
 
   useEffect(() => {
     const unsubscribeStatus = client.onStatusChange(setConnectionStatus)
@@ -84,6 +120,7 @@ export function RemoteSimulationProvider({
         setRole(message.role)
         setSessionCode(message.sessionCode)
         setRoster(message.roster)
+        phaseRef.current = message.phase
         setPhase(message.phase)
         return
       }
@@ -92,9 +129,24 @@ export function RemoteSimulationProvider({
         return
       }
       if (message.type === 'state') {
-        waveformStore.writeSnapshot(message.snapshot)
+        const stateApplication = getRemoteStateApplication({
+          latestElapsedSeconds: latestElapsedSecondsRef.current,
+          hasReceivedState: hasReceivedStateRef.current,
+          previousPhase: phaseRef.current,
+          pendingRunStart: resetWaveformsOnNextStateRef.current,
+          snapshot: message.snapshot,
+        })
+        if (stateApplication === 'reject') return
+        if (stateApplication === 'reset') {
+          waveformStore.reset(message.snapshot)
+        } else if (stateApplication === 'write') {
+          waveformStore.writeSnapshot(message.snapshot)
+        }
+        hasReceivedStateRef.current = true
+        resetWaveformsOnNextStateRef.current = false
         setElapsedSeconds(message.snapshot.elapsedSeconds)
         latestElapsedSecondsRef.current = message.snapshot.elapsedSeconds
+        phaseRef.current = message.snapshot.phase
         setPhase(message.snapshot.phase)
         setPaused(message.snapshot.paused)
         setCurrentPhaseId(message.snapshot.currentPhaseId)
@@ -111,6 +163,10 @@ export function RemoteSimulationProvider({
         return
       }
       if (message.type === 'phase_change') {
+        if (phaseRef.current !== 'running' && message.phase === 'running') {
+          resetWaveformsOnNextStateRef.current = true
+        }
+        phaseRef.current = message.phase
         setPhase(message.phase)
         return
       }
@@ -126,6 +182,7 @@ export function RemoteSimulationProvider({
     }
   }, [client, initialMessage, waveformStore])
 
+  const commandsAvailable = connectionStatus === 'connected'
   const send = useCallback((message: ClientMessage) => client.send(message), [client])
   const scenario = scenarioMetadata ? scenarioFromMetadata(scenarioMetadata) : null
 
@@ -145,12 +202,14 @@ export function RemoteSimulationProvider({
     eventLog,
     doseLedger,
     waveformSource: waveformStore.source,
+    connectionStatus,
+    commandsAvailable,
     audioSource,
-    applyIntervention: id => send({ type: 'intervene', interventionId: id }),
-    updateMachineSettings: (settings: MachineSettingsUpdate) => send({ type: 'update_machine_settings', settings }),
-    setManualVentilation: active => send({ type: 'set_manual_ventilation', active }),
-    togglePause: () => send({ type: 'pause' }),
-  }), [state, scenario, phase, elapsedSeconds, eventLog, doseLedger, waveformStore, audioSource, send])
+    applyIntervention: id => { if (commandsAvailable) send({ type: 'intervene', interventionId: id }) },
+    updateMachineSettings: (settings: MachineSettingsUpdate) => { if (commandsAvailable) send({ type: 'update_machine_settings', settings }) },
+    setManualVentilation: active => { if (commandsAvailable) send({ type: 'set_manual_ventilation', active }) },
+    togglePause: () => { if (commandsAvailable) send({ type: 'pause' }) },
+  }), [state, scenario, phase, elapsedSeconds, eventLog, doseLedger, waveformStore, connectionStatus, commandsAvailable, audioSource, send])
 
   return (
     <RemoteSimulationContext.Provider value={{
@@ -163,6 +222,7 @@ export function RemoteSimulationProvider({
       currentPhaseId,
       completedPhaseIds,
       forcedPhaseId,
+      commandsAvailable,
       send,
     }}>
       <SimulationBridgeProvider value={bridgeValue}>{children}</SimulationBridgeProvider>

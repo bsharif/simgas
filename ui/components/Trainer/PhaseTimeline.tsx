@@ -2,7 +2,7 @@ import type { FC } from 'react'
 import { useRemoteSimulation } from '../../context/RemoteSimulationContext'
 
 const PhaseTimeline: FC = () => {
-  const { scenarioMetadata, send, currentPhaseId, completedPhaseIds, forcedPhaseId } = useRemoteSimulation()
+  const { scenarioMetadata, send, currentPhaseId, completedPhaseIds, forcedPhaseId, commandsAvailable } = useRemoteSimulation()
   if (!scenarioMetadata) return <div className="trainer-card">Waiting for scenario metadata...</div>
 
   return (
@@ -16,10 +16,11 @@ const PhaseTimeline: FC = () => {
           {entry.enterWhen && <span>Enter: {entry.enterWhen}</span>}
           {entry.resolveWhen && <span>Resolve: {entry.resolveWhen}</span>}
           {entry.failWhen && <span>Fail: {entry.failWhen}</span>}
-          <button onClick={() => send({ type: 'advance_phase', phaseId: entry.id })}>Advance now</button>
+          <button disabled={!commandsAvailable} onClick={() => send({ type: 'advance_phase', phaseId: entry.id })}>Advance now</button>
         </div>
       ))}
-      <button onClick={() => send({ type: 'clear_forced_phase' })}>Return to automatic</button>
+      <button disabled={!commandsAvailable} onClick={() => send({ type: 'clear_forced_phase' })}>Return to automatic</button>
+      {!commandsAvailable && <p className="command-unavailable">Trainer commands unavailable while reconnecting.</p>}
     </section>
   )
 }

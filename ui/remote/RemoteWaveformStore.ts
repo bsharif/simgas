@@ -5,12 +5,16 @@ import {
   generateETCO2Sample,
   generateRespSample,
   generateSpO2Sample,
+  SAMPLES_PER_TICK,
 } from '../../engine/waveforms'
 import type { RemotePatientSnapshot } from '../../shared/protocol'
 import type { WaveformSource } from '../components/Monitor/waveformSource'
 
+const SAMPLE_DT = 1 / (60 * SAMPLES_PER_TICK)
+
 export class RemoteWaveformStore {
   readonly source: WaveformSource
+  private lastElapsedSeconds = 0
 
   constructor() {
     this.source = {
@@ -25,7 +29,7 @@ export class RemoteWaveformStore {
     }
     // Pre-fill with baseline vitals so the first frame shows waveforms.
     const baseline = createBaselineState()
-    this.writeSnapshot({
+    this.reset({
       hr: baseline.hr,
       spo2: baseline.spo2,
       nibp: baseline.nibp,
@@ -52,12 +56,34 @@ export class RemoteWaveformStore {
       currentPhaseId: null,
       completedPhaseIds: [],
       forcedPhaseId: null,
-    }, BUFFER_SIZE)
+    })
   }
 
-  writeSnapshot(snapshot: RemotePatientSnapshot, sampleCount = 2): void {
+  reset(snapshot?: RemotePatientSnapshot): void {
+    this.source.state.ecgBuffer.fill(0)
+    this.source.state.spo2Buffer.fill(0)
+    this.source.state.etco2Buffer.fill(0)
+    this.source.state.respBuffer.fill(0)
+    this.source.state.artBuffer.fill(0)
+    this.source.state.bufferWritePos = 0
+    this.lastElapsedSeconds = snapshot?.elapsedSeconds ?? 0
+
+    if (snapshot) this.writeSamples(snapshot, BUFFER_SIZE, snapshot.elapsedSeconds - BUFFER_SIZE * SAMPLE_DT)
+  }
+
+  writeSnapshot(snapshot: RemotePatientSnapshot, sampleCount?: number): void {
+    if (snapshot.elapsedSeconds <= this.lastElapsedSeconds) return
+
+    const elapsedDelta = snapshot.elapsedSeconds - this.lastElapsedSeconds
+    const expectedSampleCount = Math.round(elapsedDelta * 60 * SAMPLES_PER_TICK)
+    const cappedSampleCount = Math.min(expectedSampleCount, 60 * SAMPLES_PER_TICK)
+    this.writeSamples(snapshot, sampleCount ?? cappedSampleCount, this.lastElapsedSeconds)
+    this.lastElapsedSeconds = snapshot.elapsedSeconds
+  }
+
+  private writeSamples(snapshot: RemotePatientSnapshot, sampleCount: number, startSeconds: number): void {
     for (let i = 0; i < sampleCount; i++) {
-      const t = snapshot.elapsedSeconds + i / Math.max(sampleCount, 1) / 60
+      const t = startSeconds + (i + 1) * SAMPLE_DT
       const pos = this.source.state.bufferWritePos
 
       this.source.state.ecgBuffer[pos] = generateECGSample(t, snapshot.hr, snapshot.ecgRhythm)
