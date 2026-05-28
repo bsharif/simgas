@@ -23,8 +23,9 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
   useEffect(() => {
     if (!sessionCode || !qrCanvasRef.current) return
     const containerWidth = qrContainerRef.current?.clientWidth ?? 188
+    const containerHeight = qrContainerRef.current?.clientHeight ?? 140
     QRCode.toCanvas(qrCanvasRef.current, inviteUrl, {
-      width: getQrCodeSize(containerWidth),
+      width: getQrCodeSize(containerWidth, containerHeight),
       margin: 2,
       color: { dark: '#1d83a6', light: '#ffffff' },
     }, (error: unknown) => {
@@ -60,7 +61,7 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
         <div className="trainer-monitor"><Monitor /></div>
         <aside className="trainer-controls">
           <div className="qr-placeholder" ref={qrContainerRef}>
-            <canvas ref={qrCanvasRef} style={{ display: qrReady ? 'block' : 'none', width: '100%', height: 'auto', maxWidth: 280 }} />
+            <canvas ref={qrCanvasRef} className="qr-canvas" style={{ display: qrReady ? 'block' : 'none' }} />
             {!qrReady && <span>Generating QR...</span>}
           </div>
           <PhaseTimeline />

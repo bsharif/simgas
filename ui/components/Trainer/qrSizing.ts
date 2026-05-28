@@ -1,7 +1,8 @@
-const QR_MIN_SIZE_PX = 160
-const QR_MAX_SIZE_PX = 280
+const QR_PADDING_PX = 24
+const QR_MIN_SIZE_PX = 96
+const QR_MAX_SIZE_PX = 180
 
-export function getQrCodeSize(containerWidth: number): number {
-  const availableWidth = Math.floor(containerWidth * 0.85)
-  return Math.max(QR_MIN_SIZE_PX, Math.min(QR_MAX_SIZE_PX, availableWidth))
+export function getQrCodeSize(containerWidth: number, containerHeight: number): number {
+  const availableSize = Math.floor(Math.min(containerWidth, containerHeight) - QR_PADDING_PX)
+  return Math.max(QR_MIN_SIZE_PX, Math.min(QR_MAX_SIZE_PX, availableSize))
 }
