@@ -27,7 +27,7 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
       width: getQrCodeSize(containerWidth),
       margin: 2,
       color: { dark: '#1d83a6', light: '#ffffff' },
-    }, (error) => {
+    }, (error: unknown) => {
       if (error) console.error('QR generation failed:', error)
       else setQrReady(true)
     })
