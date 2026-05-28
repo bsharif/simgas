@@ -14,7 +14,14 @@ const SAMPLE_DT = 1 / (60 * SAMPLES_PER_TICK)
 
 export class RemoteWaveformStore {
   readonly source: WaveformSource
-  private lastElapsedSeconds = 0
+  // serverElapsedSeconds: last elapsed received from the server (authoritative)
+  private serverElapsedSeconds = 0
+  // localElapsedSeconds: how far the buffer has actually been written (server + interpolation)
+  private localElapsedSeconds = 0
+  private lastSnapshotVitals: RemotePatientSnapshot | null = null
+  private paused = false
+  private lastTickMs = 0
+  private rafHandle: ReturnType<typeof requestAnimationFrame> | null = null
 
   constructor() {
     this.source = {
@@ -27,7 +34,6 @@ export class RemoteWaveformStore {
         bufferWritePos: 0,
       },
     }
-    // Pre-fill with baseline vitals so the first frame shows waveforms.
     const baseline = createBaselineState()
     this.reset({
       hr: baseline.hr,
@@ -66,19 +72,63 @@ export class RemoteWaveformStore {
     this.source.state.respBuffer.fill(0)
     this.source.state.artBuffer.fill(0)
     this.source.state.bufferWritePos = 0
-    this.lastElapsedSeconds = snapshot?.elapsedSeconds ?? 0
-
-    if (snapshot) this.writeSamples(snapshot, BUFFER_SIZE, snapshot.elapsedSeconds - BUFFER_SIZE * SAMPLE_DT)
+    const elapsed = snapshot?.elapsedSeconds ?? 0
+    this.serverElapsedSeconds = elapsed
+    this.localElapsedSeconds = elapsed
+    if (snapshot) {
+      this.lastSnapshotVitals = snapshot
+      this.paused = snapshot.paused
+      this.writeSamples(snapshot, BUFFER_SIZE, elapsed - BUFFER_SIZE * SAMPLE_DT)
+    }
   }
 
   writeSnapshot(snapshot: RemotePatientSnapshot, sampleCount?: number): void {
-    if (snapshot.elapsedSeconds <= this.lastElapsedSeconds) return
+    // Reject against the authoritative server elapsed, not the local interpolated position.
+    if (snapshot.elapsedSeconds <= this.serverElapsedSeconds) return
 
-    const elapsedDelta = snapshot.elapsedSeconds - this.lastElapsedSeconds
-    const expectedSampleCount = Math.round(elapsedDelta * 60 * SAMPLES_PER_TICK)
-    const cappedSampleCount = Math.min(expectedSampleCount, 60 * SAMPLES_PER_TICK)
-    this.writeSamples(snapshot, sampleCount ?? cappedSampleCount, this.lastElapsedSeconds)
-    this.lastElapsedSeconds = snapshot.elapsedSeconds
+    this.lastSnapshotVitals = snapshot
+    this.paused = snapshot.paused
+    this.serverElapsedSeconds = snapshot.elapsedSeconds
+
+    // Only write samples for the portion the local interpolation hasn't already covered.
+    if (snapshot.elapsedSeconds > this.localElapsedSeconds) {
+      const delta = snapshot.elapsedSeconds - this.localElapsedSeconds
+      const expectedCount = Math.round(delta * 60 * SAMPLES_PER_TICK)
+      const cappedCount = Math.min(sampleCount ?? expectedCount, 60 * SAMPLES_PER_TICK)
+      if (cappedCount > 0) {
+        this.writeSamples(snapshot, cappedCount, this.localElapsedSeconds)
+        this.localElapsedSeconds = snapshot.elapsedSeconds
+      }
+    }
+    // else: the local rAF tick has already written past this point — vitals updated, no extra samples.
+  }
+
+  startTick(): void {
+    if (this.rafHandle !== null) return
+    this.lastTickMs = performance.now()
+    this.rafHandle = requestAnimationFrame(this.tick)
+  }
+
+  stopTick(): void {
+    if (this.rafHandle !== null) {
+      cancelAnimationFrame(this.rafHandle)
+      this.rafHandle = null
+    }
+  }
+
+  // Arrow function so `this` is bound correctly when passed to rAF.
+  private tick = (wallMs: number): void => {
+    const vitals = this.lastSnapshotVitals
+    if (vitals && vitals.phase === 'running' && !this.paused) {
+      const dtSec = Math.min((wallMs - this.lastTickMs) / 1000, 0.1)
+      const sampleCount = Math.round(dtSec * 60 * SAMPLES_PER_TICK)
+      if (sampleCount > 0) {
+        this.writeSamples(vitals, sampleCount, this.localElapsedSeconds)
+        this.localElapsedSeconds += sampleCount * SAMPLE_DT
+      }
+    }
+    this.lastTickMs = wallMs
+    this.rafHandle = requestAnimationFrame(this.tick)
   }
 
   private writeSamples(snapshot: RemotePatientSnapshot, sampleCount: number, startSeconds: number): void {

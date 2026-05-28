@@ -106,6 +106,11 @@ export function RemoteSimulationProvider({
   const hasReceivedStateRef = useRef(false)
 
   useEffect(() => {
+    waveformStore.startTick()
+    return () => waveformStore.stopTick()
+  }, [waveformStore])
+
+  useEffect(() => {
     const unsubscribeStatus = client.onStatusChange(setConnectionStatus)
     client.connect()
     if (initialMessage) client.send(initialMessage)

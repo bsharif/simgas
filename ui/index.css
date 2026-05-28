@@ -586,7 +586,7 @@ body {
 
   .remote-session--trainee .right-panel {
     width: 100%;
-    height: min(76vh, 620px);
+    height: min(55vh, 480px);
     border-left: 0;
   }
 
