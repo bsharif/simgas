@@ -69,6 +69,7 @@ export interface PatientState {
   artBuffer: Float32Array
   bufferWritePos: number
   driftBaseline: DriftBaseline
+  scenarioBaseline: DriftBaseline
 }
 
 /** Keys on PatientState that hold a waveform ring buffer. */
@@ -122,5 +123,6 @@ export function createBaselineState(): PatientState {
     cvp: null,
     bis: null,
     driftBaseline: {},
+    scenarioBaseline: {},
   }
 }

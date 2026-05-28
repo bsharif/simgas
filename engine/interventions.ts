@@ -119,7 +119,7 @@ export function applyModifier(state: PatientState, mod: PatientModifier): void {
   if (mod.bis !== undefined) state.bis = mod.bis
 
   if (mod.baseline) {
-    const dst = state.driftBaseline
+    const dst = state.scenarioBaseline
     const src = mod.baseline
     if (src.hr !== undefined) dst.hr = src.hr
     if (src.spo2 !== undefined) dst.spo2 = src.spo2
@@ -138,16 +138,31 @@ export function applyModifier(state: PatientState, mod: PatientModifier): void {
 /**
  * Lerp each vital toward its drift target. Constant rates per second so
  * scenario phases reach their targets in predictable times (e.g. HR target 130
- * from baseline 78 with rate 1.0 BPM/sec reaches target in ~52s).
+ * from baseline 78 with rate 0.75 BPM/sec reaches target in ~69s).
  */
 const DRIFT_RATE_PER_SEC = {
-  hr: 1.0,        // BPM/sec
-  spo2: 0.5,      // %/sec
-  etco2: 0.05,    // kPa/sec
-  rr: 0.5,        // breaths/min/sec
-  temp: 0.02,     // °C/sec
-  nibpSys: 1.0,   // mmHg/sec
-  nibpDia: 0.7,   // mmHg/sec
+  hr: 0.75,       // BPM/sec
+  spo2: 0.375,    // %/sec
+  etco2: 0.0375,  // kPa/sec
+  rr: 0.375,      // breaths/min/sec
+  temp: 0.015,    // °C/sec
+  nibpSys: 0.75,  // mmHg/sec
+  nibpDia: 0.525, // mmHg/sec
+} as const
+
+/**
+ * Smoothing rate for driftBaseline → scenarioBaseline. Faster than drift
+ * (~2.5–3x) so phase-switch targets settle quickly while vitals follow at
+ * a measured pace.
+ */
+const BASELINE_SMOOTH_RATE_PER_SEC = {
+  hr: 2.0,
+  spo2: 1.0,
+  etco2: 0.1,
+  rr: 1.0,
+  temp: 0.04,
+  nibpSys: 2.0,
+  nibpDia: 1.5,
 } as const
 
 function driftToward(current: number, target: number, ratePerSec: number, dtSec: number): number {
@@ -158,7 +173,50 @@ function driftToward(current: number, target: number, ratePerSec: number, dtSec:
 }
 
 export function applyDrift(state: PatientState, dtSec: number): void {
-  const b = state.driftBaseline
+  const s = state.scenarioBaseline
+  const d = state.driftBaseline
+
+  // Stage 1: smooth driftBaseline toward scenarioBaseline.
+  // Initialize from current vitals (not scenario target) so the very first
+  // frame starts a smooth pull from where the patient actually is.
+  if (s.hr !== undefined) {
+    if (d.hr === undefined) d.hr = state.hr
+    d.hr = driftToward(d.hr, s.hr, BASELINE_SMOOTH_RATE_PER_SEC.hr, dtSec)
+  }
+  if (s.spo2 !== undefined) {
+    if (d.spo2 === undefined) d.spo2 = state.spo2
+    d.spo2 = driftToward(d.spo2, s.spo2, BASELINE_SMOOTH_RATE_PER_SEC.spo2, dtSec)
+  }
+  if (s.etco2 !== undefined) {
+    if (d.etco2 === undefined) d.etco2 = state.etco2
+    d.etco2 = driftToward(d.etco2, s.etco2, BASELINE_SMOOTH_RATE_PER_SEC.etco2, dtSec)
+  }
+  if (s.rr !== undefined) {
+    if (d.rr === undefined) d.rr = state.rr
+    d.rr = driftToward(d.rr, s.rr, BASELINE_SMOOTH_RATE_PER_SEC.rr, dtSec)
+  }
+  if (s.temp !== undefined) {
+    if (d.temp === undefined) d.temp = state.temp
+    d.temp = driftToward(d.temp, s.temp, BASELINE_SMOOTH_RATE_PER_SEC.temp, dtSec)
+  }
+  if (s.nibp) {
+    if (!d.nibp) d.nibp = {}
+    if (s.nibp.sys !== undefined) {
+      if (d.nibp.sys === undefined) d.nibp.sys = state.nibp.sys
+      d.nibp.sys = driftToward(d.nibp.sys, s.nibp.sys, BASELINE_SMOOTH_RATE_PER_SEC.nibpSys, dtSec)
+    }
+    if (s.nibp.dia !== undefined) {
+      if (d.nibp.dia === undefined) d.nibp.dia = state.nibp.dia
+      d.nibp.dia = driftToward(d.nibp.dia, s.nibp.dia, BASELINE_SMOOTH_RATE_PER_SEC.nibpDia, dtSec)
+    }
+    if (s.nibp.map !== undefined) {
+      if (d.nibp.map === undefined) d.nibp.map = state.nibp.map
+      d.nibp.map = driftToward(d.nibp.map, s.nibp.map, BASELINE_SMOOTH_RATE_PER_SEC.nibpSys, dtSec)
+    }
+  }
+
+  // Stage 2: lerp actual vitals toward the smoothed driftBaseline
+  const b = d
   if (b.hr !== undefined) state.hr = driftToward(state.hr, b.hr, DRIFT_RATE_PER_SEC.hr, dtSec)
   if (b.spo2 !== undefined) state.spo2 = driftToward(state.spo2, b.spo2, DRIFT_RATE_PER_SEC.spo2, dtSec)
   if (b.etco2 !== undefined) state.etco2 = driftToward(state.etco2, b.etco2, DRIFT_RATE_PER_SEC.etco2, dtSec)
@@ -171,10 +229,6 @@ export function applyDrift(state: PatientState, dtSec: number): void {
       ? driftToward(state.nibp.map, b.nibp.map, DRIFT_RATE_PER_SEC.nibpSys, dtSec)
       : Math.round(state.nibp.dia + (state.nibp.sys - state.nibp.dia) / 3)
   }
-}
-
-export function combineWithBaseline(mod: PatientModifier): PatientModifier {
-  return mod
 }
 
 export const INTERVENTIONS: Intervention[] = [

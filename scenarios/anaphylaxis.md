@@ -9,19 +9,21 @@ hints:
   - "Give adrenaline early — it is the first-line treatment"
   - "Fluids and high-flow oxygen are also key"
 
-initial_state:
-  hr: 120
-  spo2: 92
-  nibp: { sys: 70, dia: 50, map: 58 }
-
-initial_baseline:
-  hr: 130
-  spo2: 88
-  nibp: { sys: 70, dia: 50, map: 58 }
-  etco2: 4.0
-
 phases:
+  - id: stable
+    baseline:
+      hr: 78
+      spo2: 99
+      nibp: { sys: 120, dia: 80, map: 93 }
+      etco2: 5.0
+    events:
+      - at: 5s
+        text: "→ IV antibiotic administered"
+
   - id: onset
+    enter_when: "time > 5"
+    snap:
+      capnographyShape: bronchospasm
     baseline:
       hr: 130
       spo2: 88
@@ -30,6 +32,8 @@ phases:
     events:
       - at: 10s
         text: "⚠ HR rising, BP falling — possible anaphylaxis"
+      - at: 20s
+        text: "⚠ Bronchospasm — airway pressure rising, SpO₂ dropping"
 
   - id: untreated
     enter_when: "time > 30 && !any('adrenaline-*')"
@@ -52,6 +56,8 @@ phases:
 
   - id: recovery
     enter_when: "any('adrenaline-*')"
+    snap:
+      capnographyShape: normal
     baseline:
       hr: 85
       spo2: 99
