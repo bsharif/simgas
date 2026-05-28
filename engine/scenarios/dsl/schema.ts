@@ -54,8 +54,12 @@ const PhaseEventSchema = z
 const PhaseSchema = z
   .object({
     id: z.string(),
+    /** Human-readable phase name shown in the trainer UI. Falls back to auto-formatted id. */
+    label: z.string().optional(),
     /** Predicate string. Default is "true" (this phase always wants to be active). */
     enter_when: z.string().optional(),
+    /** Human-friendly description of when this phase activates. Shown instead of raw enter_when. */
+    enter_description: z.string().optional(),
     /** Instant state change applied once when this phase is first entered. */
     snap: SnapSchema.optional(),
     /** Drift targets applied while this phase is active. */
@@ -64,10 +68,14 @@ const PhaseSchema = z
     events: z.array(PhaseEventSchema).optional().default([]),
     /** Predicate; if true, scenario resolves. Typical: "phase_elapsed > 60". */
     resolve_when: z.string().optional(),
+    /** Human-friendly description of when the scenario resolves. Shown instead of raw resolve_when. */
+    resolve_description: z.string().optional(),
     resolve_events: z.array(z.string()).optional().default([]),
     resolve_snap: SnapSchema.optional(),
     /** Predicate; if true, scenario fails. */
     fail_when: z.string().optional(),
+    /** Human-friendly description of when the scenario fails. Shown instead of raw fail_when. */
+    fail_description: z.string().optional(),
     fail_events: z.array(z.string()).optional().default([]),
     fail_snap: SnapSchema.optional(),
     /** intervention-id → hint shown if the user hasn't applied it yet in this phase. */

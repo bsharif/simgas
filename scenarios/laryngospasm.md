@@ -10,6 +10,7 @@ hints:
 
 phases:
   - id: onset
+    label: "Laryngospasm onset"
     snap: { tubePosition: none, spo2: 95, hr: 95, etco2: 0.5 }
     baseline: { hr: 100, spo2: 88, etco2: 0.3 }
     events:
@@ -17,17 +18,23 @@ phases:
         text: "⚠ Post-extubation laryngospasm — no chest movement, stridor"
 
   - id: complete
+    label: "Complete obstruction"
     enter_when: "spo2 < 90 && !any('jaw-thrust') && !any('manual-vent')"
+    enter_description: "SpO₂ drops below 90% without airway intervention"
     baseline: { hr: 140, spo2: 68 }
     fail_when: "spo2 < 72 && phase_elapsed > 40"
+    fail_description: "Hypoxic cardiac arrest if untreated"
     fail_snap: { ecgRhythm: asystole, hr: 30 }
     fail_events:
       - "❌ Hypoxic cardiac arrest — laryngospasm untreated"
 
   - id: recovery
+    label: "Recovery"
     enter_when: "any('jaw-thrust') || any('manual-vent') || any('propofol')"
+    enter_description: "Airway intervention performed"
     baseline: { hr: 90, spo2: 98, etco2: 3.5 }
     resolve_when: "spo2 > 95 && phase_elapsed > 45"
+    resolve_description: "SpO₂ recovers above 95%"
     resolve_snap: { hr: 82, spo2: 99 }
     resolve_events:
       - "✓ Laryngospasm broken — airway patent, SpO₂ recovering"

@@ -60,7 +60,7 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
         <div className="trainer-monitor"><Monitor /></div>
         <aside className="trainer-controls">
           <div className="qr-placeholder" ref={qrContainerRef}>
-            <canvas ref={qrCanvasRef} style={{ display: qrReady ? 'block' : 'none' }} />
+            <canvas ref={qrCanvasRef} style={{ display: qrReady ? 'block' : 'none', width: '100%', height: 'auto', maxWidth: 280 }} />
             {!qrReady && <span>Generating QR...</span>}
           </div>
           <PhaseTimeline />

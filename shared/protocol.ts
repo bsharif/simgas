@@ -45,8 +45,11 @@ export interface ScenarioMetadataMessage {
     id: string
     label?: string
     enterWhen?: string
+    enterDescription?: string
     resolveWhen?: string
+    resolveDescription?: string
     failWhen?: string
+    failDescription?: string
     events?: Array<{ atSec: number; text: string }>
     baseline?: unknown
     snap?: unknown

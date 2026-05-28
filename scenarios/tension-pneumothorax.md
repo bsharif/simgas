@@ -16,6 +16,7 @@ initial_state:
 
 phases:
   - id: onset
+    label: "Tension pneumothorax"
     baseline: { spo2: 86, hr: 115, nibp: { sys: 82, dia: 48, map: 59 }, etco2: 3.2 }
     events:
       - at: 8s
@@ -24,18 +25,24 @@ phases:
         text: "⚠ Hypotension and tachycardia worsening — tracheal deviation left"
 
   - id: critical
+    label: "Critical"
     enter_when: "spo2 < 88 && !any('chest-decompression')"
+    enter_description: "SpO₂ below 88% without chest decompression"
     baseline: { spo2: 65, hr: 140, nibp: { sys: 55, dia: 30, map: 38 } }
     fail_when: "spo2 < 72 && phase_elapsed > 40"
+    fail_description: "Cardiac arrest if not decompressed in time"
     fail_snap: { ecgRhythm: asystole }
     fail_events:
       - "❌ Tension pneumothorax untreated — cardiac arrest"
 
   - id: decompressed
+    label: "Decompressed"
     enter_when: "any('chest-decompression')"
+    enter_description: "Chest decompression performed"
     snap: { nibp: { sys: 100, dia: 62, map: 75 } }
     baseline: { spo2: 98, hr: 90, nibp: { sys: 118, dia: 74, map: 89 }, etco2: 4.6 }
     resolve_when: "spo2 > 94 && phase_elapsed > 60"
+    resolve_description: "Haemodynamics restore after 60 seconds"
     resolve_snap: { hr: 82, spo2: 99 }
     resolve_events:
       - "✓ Tension pneumothorax decompressed — haemodynamics restoring"

@@ -20,9 +20,13 @@ function toMetadata(spec: ScenarioSpec): ScenarioMetadataMessage {
     label: spec.label,
     phases: spec.phases.map(phase => ({
       id: phase.id,
+      label: phase.label,
       enterWhen: phase.enter_when,
+      enterDescription: phase.enter_description,
       resolveWhen: phase.resolve_when,
+      resolveDescription: phase.resolve_description,
       failWhen: phase.fail_when,
+      failDescription: phase.fail_description,
       events: phase.events.map(event => ({
         atSec: parseDurationSec(event.at),
         text: event.text,

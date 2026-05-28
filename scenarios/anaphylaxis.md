@@ -11,6 +11,7 @@ hints:
 
 phases:
   - id: stable
+    label: "Stable period"
     baseline:
       hr: 78
       spo2: 99
@@ -21,7 +22,9 @@ phases:
         text: "→ IV antibiotic administered"
 
   - id: onset
+    label: "Anaphylaxis onset"
     enter_when: "time > 5"
+    enter_description: "5 seconds after antibiotic administration"
     snap:
       capnographyShape: bronchospasm
     baseline:
@@ -36,7 +39,9 @@ phases:
         text: "⚠ Bronchospasm — airway pressure rising, SpO₂ dropping"
 
   - id: untreated
+    label: "Untreated deterioration"
     enter_when: "time > 30 && !any('adrenaline-*')"
+    enter_description: "No adrenaline given within 30 seconds"
     baseline:
       hr: 155
       spo2: 70
@@ -46,6 +51,7 @@ phases:
       - at: 30s
         text: "⚠ Severe hypotension — risk of cardiac arrest"
     fail_when: "phase_elapsed > 60"
+    fail_description: "Heart stops after 60 seconds without treatment"
     fail_events:
       - "❌ Cardiac arrest — failure to treat anaphylaxis"
     fail_snap:
@@ -55,7 +61,9 @@ phases:
       nibp: { sys: 0, dia: 0, map: 0 }
 
   - id: recovery
+    label: "Recovery"
     enter_when: "any('adrenaline-*')"
+    enter_description: "Adrenaline administered"
     snap:
       capnographyShape: normal
     baseline:
@@ -67,6 +75,7 @@ phases:
       increase-fio2: "Consider high-flow oxygen"
       fluid-bolus: "Consider IV fluid bolus"
     resolve_when: "phase_elapsed > 90"
+    resolve_description: "Vitals stabilise after 90 seconds"
     resolve_events:
       - "✓ Patient stabilised after anaphylaxis treatment"
     resolve_snap:

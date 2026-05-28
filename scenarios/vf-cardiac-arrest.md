@@ -15,32 +15,40 @@ initial_state:
 
 phases:
   - id: arrest
+    label: "Cardiac arrest"
     snap: { ecgRhythm: vf, hr: 0, nibp: { sys: 0, dia: 0, map: 0 } }
     baseline: { spo2: 50, etco2: 1.5 }
     events:
       - at: 2s
         text: "⚠ CARDIAC ARREST — VF on monitor. No pulse."
     fail_when: "phase_elapsed > 30 && !any('cpr')"
+    fail_description: "Fatal outcome if no CPR started within 30 seconds"
     fail_snap: { ecgRhythm: asystole }
     fail_events:
       - "❌ No CPR started — patient outcome fatal"
 
   - id: cpr-active
+    label: "CPR in progress"
     enter_when: "any('cpr')"
+    enter_description: "CPR started"
     baseline: { spo2: 70, etco2: 2.5 }
     events:
       - at: 5s
         text: "💡 CPR maintaining some perfusion — give adrenaline and defibrillate"
     fail_when: "phase_elapsed > 120 && !any('defibrillate')"
+    fail_description: "VF deteriorates to asystole if not defibrillated"
     fail_snap: { ecgRhythm: asystole }
     fail_events:
       - "❌ VF not shocked — deteriorated to asystole"
 
   - id: rosc
+    label: "Return of spontaneous circulation"
     enter_when: "any('defibrillate') && any('cpr')"
+    enter_description: "Defibrillation performed with CPR in progress"
     snap: { ecgRhythm: sinus, hr: 55 }
     baseline: { hr: 78, spo2: 96, etco2: 4.5, nibp: { sys: 95, dia: 60, map: 72 } }
     resolve_when: "spo2 > 90 && phase_elapsed > 60"
+    resolve_description: "Sinus rhythm restored after 60 seconds"
     resolve_snap: { hr: 80, spo2: 97, etco2: 4.8 }
     resolve_events:
       - "✓ Return of spontaneous circulation — maintain anaesthesia and monitoring"

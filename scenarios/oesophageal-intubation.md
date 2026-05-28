@@ -22,6 +22,7 @@ initial_baseline:
 
 phases:
   - id: onset
+    label: "Oesophageal intubation"
     snap: { capnographyShape: absent }
     baseline:
       etco2: 0.2
@@ -32,7 +33,9 @@ phases:
         text: "⚠ ETCO₂ dropping rapidly — check tube position"
 
   - id: untreated
+    label: "Untreated"
     enter_when: "tube_position != 'trachea' && time > 5"
+    enter_description: "Tube not correctly positioned in trachea after 5 seconds"
     snap: { capnographyShape: absent }
     baseline:
       etco2: 0.2
@@ -42,6 +45,7 @@ phases:
       - at: 35s
         text: "⚠ Bradycardia developing — severe hypoxia"
     fail_when: "phase_elapsed > 85"
+    fail_description: "Cardiac arrest after 85 seconds with tube misplaced"
     fail_events:
       - "❌ Cardiac arrest due to unrecognised oesophageal intubation"
     fail_snap:
@@ -51,13 +55,16 @@ phases:
       etco2: 0
 
   - id: recovery
+    label: "Recovery"
     enter_when: "tube_position == 'trachea'"
+    enter_description: "Tube correctly placed in trachea"
     snap: { capnographyShape: normal }
     baseline:
       etco2: 5.0
       spo2: 99
       hr: 90
     resolve_when: "phase_elapsed > 25"
+    resolve_description: "Stable capnography after 25 seconds"
     resolve_events:
       - "✓ ETCO₂ returned — tube correctly placed in trachea"
     resolve_snap:

@@ -17,6 +17,7 @@ initial_state:
 
 phases:
   - id: onset
+    label: "High spinal onset"
     baseline: { hr: 48, nibp: { sys: 72, dia: 40, map: 51 }, rr: 6, spo2: 97 }
     events:
       - at: 8s
@@ -25,21 +26,27 @@ phases:
         text: "⚠ HR slowing, RR declining — total spinal. Apnoea imminent."
 
   - id: apnoea
+    label: "Apnoea"
     enter_when: "rr < 6"
+    enter_description: "Respiratory rate drops below 6"
     snap: { rr: 0 }
     baseline: { hr: 35, nibp: { sys: 48, dia: 25, map: 33 }, spo2: 78 }
     events:
       - at: 3s
         text: "⚠ APNOEA — intubate immediately and support circulation"
     fail_when: "phase_elapsed > 60 && !any('metaraminol') && !any('ephedrine') && !any('fluid-bolus')"
+    fail_description: "Cardiac arrest without vasopressor or fluid support"
     fail_snap: { ecgRhythm: asystole }
     fail_events:
       - "❌ Untreated high spinal — cardiac arrest"
 
   - id: recovery
+    label: "Recovery"
     enter_when: "any('metaraminol') || any('ephedrine') || any('fluid-bolus')"
+    enter_description: "Vasopressor or fluid bolus given"
     baseline: { hr: 72, nibp: { sys: 95, dia: 60, map: 72 }, spo2: 96, rr: 12 }
     resolve_when: "spo2 > 93 && phase_elapsed > 90"
+    resolve_description: "Haemodynamics stabilise after 90 seconds"
     resolve_snap: { hr: 70, spo2: 99 }
     resolve_events:
       - "✓ High spinal managed — haemodynamics stabilising. Block will wear off over 1–2 hours."

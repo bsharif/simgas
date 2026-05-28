@@ -16,6 +16,7 @@ initial_state:
 
 phases:
   - id: haemorrhage
+    label: "Haemorrhage"
     baseline: { hr: 132, nibp: { sys: 72, dia: 42, map: 52 }, spo2: 94 }
     events:
       - at: 10s
@@ -24,17 +25,23 @@ phases:
         text: "⚠ HR rising, BP falling — activate major haemorrhage protocol"
 
   - id: decompensated
+    label: "Decompensated shock"
     enter_when: "hr > 120 && !any('fluid-bolus')"
+    enter_description: "Heart rate over 120 without fluid bolus given"
     baseline: { hr: 155, nibp: { sys: 52, dia: 28, map: 36 }, spo2: 86 }
     fail_when: "phase_elapsed > 90 && !any('fluid-bolus') && !any('metaraminol') && !any('adrenaline-1')"
+    fail_description: "Cardiac arrest from exsanguination without treatment"
     fail_snap: { ecgRhythm: asystole }
     fail_events:
       - "❌ Haemorrhagic cardiac arrest — exsanguination"
 
   - id: resuscitation
+    label: "Resuscitation"
     enter_when: "any('fluid-bolus') || any('metaraminol') || any('adrenaline-1')"
+    enter_description: "Fluid bolus or vasopressor given"
     baseline: { hr: 105, nibp: { sys: 92, dia: 58, map: 69 }, spo2: 96 }
     resolve_when: "spo2 > 93 && phase_elapsed > 90"
+    resolve_description: "Haemodynamics stabilise after 90 seconds"
     resolve_snap: { hr: 98, spo2: 98 }
     resolve_events:
       - "✓ Haemorrhage controlled — haemodynamics stabilising"

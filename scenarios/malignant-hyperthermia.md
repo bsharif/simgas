@@ -22,6 +22,7 @@ initial_baseline:
 
 phases:
   - id: onset
+    label: "MH onset"
     baseline:
       hr: 145
       etco2: 7.5
@@ -32,7 +33,9 @@ phases:
         text: "⚠ ETCO₂ and temperature rising — consider malignant hyperthermia"
 
   - id: untreated
+    label: "Untreated crisis"
     enter_when: "time > 30 && !any('dantrolene')"
+    enter_description: "No dantrolene given within 30 seconds"
     baseline:
       hr: 160
       etco2: 10.5
@@ -42,6 +45,7 @@ phases:
       - at: 30s
         text: "⚠ Critical MH crisis — dantrolene required urgently"
     fail_when: "phase_elapsed > 90"
+    fail_description: "Cardiac arrest after 90 seconds without dantrolene"
     fail_events:
       - "❌ Cardiac arrest — untreated malignant hyperthermia"
     fail_snap:
@@ -52,7 +56,9 @@ phases:
       temp: 41.0
 
   - id: recovery
+    label: "Recovery"
     enter_when: "any('dantrolene')"
+    enter_description: "Dantrolene administered"
     baseline:
       hr: 85
       etco2: 5.0
@@ -61,6 +67,7 @@ phases:
     hints_if_missing:
       increase-rr: "Consider hyperventilation to reduce ETCO₂"
     resolve_when: "phase_elapsed > 170"
+    resolve_description: "Vitals normalise after 170 seconds"
     resolve_events:
       - "✓ MH crisis controlled — dantrolene effective"
     resolve_snap:

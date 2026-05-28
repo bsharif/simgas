@@ -10,6 +10,7 @@ hints:
 
 phases:
   - id: onset
+    label: "Bronchospasm onset"
     snap: { capnographyShape: bronchospasm }
     baseline: { hr: 110, spo2: 91, etco2: 6.8, rr: 18 }
     events:
@@ -19,19 +20,25 @@ phases:
         text: "⚠ SpO₂ falling — upsloping capnograph waveform"
 
   - id: untreated
+    label: "Untreated bronchospasm"
     enter_when: "time > 30 && !any('salbutamol') && !any('manual-vent') && !any('increase-fio2')"
+    enter_description: "No treatment given within 30 seconds"
     snap: { capnographyShape: bronchospasm }
     baseline: { hr: 130, spo2: 76, etco2: 8.0 }
     fail_when: "spo2 < 78 && phase_elapsed > 45"
+    fail_description: "Cardiac arrest from severe refractory bronchospasm"
     fail_snap: { ecgRhythm: vf }
     fail_events:
       - "❌ Severe refractory bronchospasm — cardiac arrest"
 
   - id: recovery
+    label: "Recovery"
     enter_when: "any('salbutamol') || any('manual-vent') || any('increase-fio2')"
+    enter_description: "Salbutamol, manual ventilation, or high-flow oxygen given"
     snap: { capnographyShape: normal }
     baseline: { hr: 88, spo2: 97, etco2: 5.2 }
     resolve_when: "spo2 > 94 && phase_elapsed > 60"
+    resolve_description: "SpO₂ recovers above 94%"
     resolve_snap: { hr: 82, spo2: 98, etco2: 5.0 }
     resolve_events:
       - "✓ Bronchospasm resolving — SpO₂ recovering"
