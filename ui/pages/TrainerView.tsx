@@ -7,6 +7,7 @@ import PhaseTimeline from '../components/Trainer/PhaseTimeline'
 import OverridePanel from '../components/Trainer/OverridePanel'
 import EventInjector from '../components/Trainer/EventInjector'
 import TraineeRoster from '../components/Trainer/TraineeRoster'
+import { getQrCodeSize } from '../components/Trainer/qrSizing'
 
 const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
   const { sessionCode, roster, send, connectionStatus, commandsAvailable, paused } = useRemoteSimulation()
@@ -16,12 +17,14 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
   const isRunning = phase === 'running'
 
   const qrCanvasRef = useRef<HTMLCanvasElement>(null)
+  const qrContainerRef = useRef<HTMLDivElement>(null)
   const [qrReady, setQrReady] = useState(false)
 
   useEffect(() => {
     if (!sessionCode || !qrCanvasRef.current) return
+    const containerWidth = qrContainerRef.current?.clientWidth ?? 188
     QRCode.toCanvas(qrCanvasRef.current, inviteUrl, {
-      width: 180,
+      width: getQrCodeSize(containerWidth),
       margin: 2,
       color: { dark: '#1d83a6', light: '#ffffff' },
     }, (error) => {
@@ -56,7 +59,7 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
       <div className="trainer-layout">
         <div className="trainer-monitor"><Monitor /></div>
         <aside className="trainer-controls">
-          <div className="qr-placeholder">
+          <div className="qr-placeholder" ref={qrContainerRef}>
             <canvas ref={qrCanvasRef} style={{ display: qrReady ? 'block' : 'none' }} />
             {!qrReady && <span>Generating QR...</span>}
           </div>
