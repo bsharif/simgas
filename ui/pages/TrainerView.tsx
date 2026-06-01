@@ -19,19 +19,40 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
   const qrCanvasRef = useRef<HTMLCanvasElement>(null)
   const qrContainerRef = useRef<HTMLDivElement>(null)
   const [qrReady, setQrReady] = useState(false)
+  const [qrCollapsed, setQrCollapsed] = useState(false)
 
   useEffect(() => {
-    if (!sessionCode || !qrCanvasRef.current) return
-    const containerWidth = qrContainerRef.current?.clientWidth ?? 188
-    const containerHeight = qrContainerRef.current?.clientHeight ?? 140
-    QRCode.toCanvas(qrCanvasRef.current, inviteUrl, {
-      width: getQrCodeSize(containerWidth, containerHeight),
-      margin: 2,
-      color: { dark: '#1d83a6', light: '#ffffff' },
-    }, (error: unknown) => {
-      if (error) console.error('QR generation failed:', error)
-      else setQrReady(true)
-    })
+    if (!sessionCode) return
+    const canvas = qrCanvasRef.current
+    const container = qrContainerRef.current
+    if (!canvas || !container) return
+
+    let cancelled = false
+
+    const generate = () => {
+      if (cancelled) return
+      const cw = container.clientWidth
+      const ch = container.clientHeight
+      if (cw === 0 || ch === 0) return
+      QRCode.toCanvas(canvas, inviteUrl, {
+        width: getQrCodeSize(cw, ch),
+        margin: 2,
+        color: { dark: '#1d83a6', light: '#ffffff' },
+      }, (error: unknown) => {
+        if (cancelled) return
+        if (error) console.error('QR generation failed:', error)
+        else setQrReady(true)
+      })
+    }
+
+    const ro = new ResizeObserver(() => generate())
+    ro.observe(container)
+    requestAnimationFrame(() => generate())
+
+    return () => {
+      cancelled = true
+      ro.disconnect()
+    }
   }, [sessionCode, inviteUrl])
 
   return (
@@ -60,9 +81,24 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
       <div className="trainer-layout">
         <div className="trainer-monitor"><Monitor /></div>
         <aside className="trainer-controls">
-          <div className="qr-placeholder" ref={qrContainerRef}>
-            <canvas ref={qrCanvasRef} className="qr-canvas" style={{ display: qrReady ? 'block' : 'none' }} />
-            {!qrReady && <span>Generating QR...</span>}
+          <div className={`qr-placeholder${qrCollapsed ? ' qr-placeholder--collapsed' : ''}`} ref={qrContainerRef}>
+            <div className="qr-placeholder__header">
+              <span className="qr-placeholder__label">Invite QR</span>
+              <button
+                type="button"
+                className="qr-placeholder__toggle"
+                onClick={() => setQrCollapsed(c => !c)}
+                aria-expanded={!qrCollapsed}
+              >
+                {qrCollapsed ? 'Show' : 'Hide'}
+              </button>
+            </div>
+            {!qrCollapsed && (
+              <>
+                <canvas ref={qrCanvasRef} className="qr-canvas" style={{ display: qrReady ? 'block' : 'none' }} />
+                {!qrReady && <span>Generating QR...</span>}
+              </>
+            )}
           </div>
           <PhaseTimeline />
           <OverridePanel />
