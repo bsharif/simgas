@@ -449,7 +449,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: 140px;
+  height: 220px;
   flex-shrink: 0;
   padding: 12px;
   overflow: hidden;

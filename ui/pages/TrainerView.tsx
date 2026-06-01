@@ -93,12 +93,12 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
                 {qrCollapsed ? 'Show' : 'Hide'}
               </button>
             </div>
-            {!qrCollapsed && (
-              <>
-                <canvas ref={qrCanvasRef} className="qr-canvas" style={{ display: qrReady ? 'block' : 'none' }} />
-                {!qrReady && <span>Generating QR...</span>}
-              </>
-            )}
+            <canvas
+              ref={qrCanvasRef}
+              className="qr-canvas"
+              style={{ display: !qrCollapsed && qrReady ? 'block' : 'none' }}
+            />
+            {!qrCollapsed && !qrReady && <span>Generating QR...</span>}
           </div>
           <PhaseTimeline />
           <OverridePanel />
