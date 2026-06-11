@@ -42,6 +42,8 @@ const SnapSchema = BaselineSchema.extend({
   tubePosition: z.enum(['none', 'trachea', 'oesophagus']).optional(),
   fio2: z.number().optional(),
   sevoflurane: z.number().optional(),
+  /** Obstructed upper airway: bag breaths are recorded but move no gas. */
+  airwayObstructed: z.boolean().optional(),
 }).strict()
 
 const PhaseEventSchema = z
@@ -83,6 +85,22 @@ const PhaseSchema = z
   })
   .strict()
 
+/**
+ * A rubric action: an intervention the learner is expected to perform
+ * (critical/supporting), or must avoid (dangerous). `id` may be a glob
+ * (e.g. 'adrenaline-*') matching the same way `any()` does, or a '|'-separated
+ * list of alternatives ('metaraminol|ephedrine') where any one counts.
+ */
+const RubricActionSchema = z
+  .object({
+    id: z.string(),
+    label: z.string().optional(),
+    /** Expected window in seconds from scenario start for timely performance. */
+    within_sec: z.number().positive().optional(),
+    rationale: z.string().optional(),
+  })
+  .strict()
+
 export const ScenarioSpecSchema = z
   .object({
     id: z.string(),
@@ -90,6 +108,22 @@ export const ScenarioSpecSchema = z
     description: z.string(),
     difficulty: z.enum(['easy', 'medium', 'hard']),
     hints: z.array(z.string()).optional().default([]),
+    /** Scenario pack this case belongs to (grouping in pickers/packs). */
+    pack: z.string().optional(),
+    /** QRH section reference, e.g. "3-4 Bronchospasm". */
+    qrh: z.string().optional(),
+    /** Clinical-education rubric (review Phase 2): expected management. */
+    learning_objectives: z.array(z.string()).optional(),
+    critical_actions: z.array(RubricActionSchema).optional(),
+    supporting_actions: z.array(RubricActionSchema).optional(),
+    dangerous_actions: z.array(RubricActionSchema).optional(),
+    /** Provenance / review metadata (review Phase 5). */
+    references: z.array(z.string()).optional(),
+    guideline_version: z.string().optional(),
+    author: z.string().optional(),
+    reviewers: z.array(z.string()).optional(),
+    last_reviewed: z.string().optional(),
+    license: z.string().optional(),
     /** Vitals + non-drift state set instantly when the scenario starts. */
     initial_state: SnapSchema.optional(),
     /** Initial drift targets. */
@@ -99,6 +133,7 @@ export const ScenarioSpecSchema = z
   .strict()
 
 export type ScenarioSpec = z.infer<typeof ScenarioSpecSchema>
+export type RubricActionSpec = z.infer<typeof RubricActionSchema>
 export type PhaseSpec = z.infer<typeof PhaseSchema>
 export type PhaseEvent = z.infer<typeof PhaseEventSchema>
 export type Snap = z.infer<typeof SnapSchema>

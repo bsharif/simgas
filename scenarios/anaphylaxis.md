@@ -3,6 +3,51 @@ id: anaphylaxis
 label: Anaphylaxis
 description: A 35-year-old develops sudden anaphylaxis after IV antibiotic administration.
 difficulty: medium
+pack: "Core anaesthetic crises"
+qrh: "3-1 Anaphylaxis"
+
+learning_objectives:
+  - "Recognise anaphylaxis from sudden hypotension, tachycardia, and bronchospasm"
+  - "Stop the trigger and call for help immediately"
+  - "Give adrenaline early and titrate to response"
+  - "Complete the bundle: 100% oxygen and rapid IV fluids, not adrenaline alone"
+
+critical_actions:
+  - id: stop-trigger
+    label: "Stop the trigger (antibiotic infusion)"
+    within_sec: 30
+    rationale: "Ongoing exposure deepens the reaction"
+  - id: call-help
+    label: "Call for help"
+    within_sec: 45
+    rationale: "Anaphylaxis management is a team task"
+  - id: "adrenaline-1|adrenaline-10"
+    label: "IV adrenaline"
+    within_sec: 45
+    rationale: "First-line treatment — delay drives progression to arrest"
+  - id: increase-fio2
+    label: "100% oxygen"
+    within_sec: 90
+    rationale: "Counters hypoxia from bronchospasm and V/Q mismatch"
+  - id: fluid-bolus
+    label: "Rapid IV fluid bolus"
+    within_sec: 120
+    rationale: "Massive vasodilation and capillary leak need volume"
+
+supporting_actions:
+  - id: manual-vent
+    label: "Support ventilation"
+
+dangerous_actions:
+  - id: propofol
+    label: "Propofol bolus"
+    rationale: "Deepens vasodilation and worsens the hypotension"
+
+references:
+  - "Association of Anaesthetists QRH 3-1 Anaphylaxis (June 2023)"
+guideline_version: "QRH June 2023"
+author: "SimGas contributors"
+last_reviewed: "2026-06-11"
 
 hints:
   - "Check the airway — bronchospasm may be present"
@@ -37,6 +82,9 @@ phases:
         text: "⚠ HR rising, BP falling — possible anaphylaxis"
       - at: 20s
         text: "⚠ Bronchospasm — airway pressure rising, SpO₂ dropping"
+    hints_if_missing:
+      stop-trigger: "💡 Suspect the antibiotic — stop the infusion"
+      call-help: "💡 Declare the emergency and call for help"
 
   - id: untreated
     label: "Untreated deterioration"
@@ -60,6 +108,27 @@ phases:
       spo2: 0
       nibp: { sys: 0, dia: 0, map: 0 }
 
+  - id: iatrogenic-collapse
+    label: "Collapse worsened by induction agent"
+    enter_when: "any('propofol') && !any('adrenaline-*')"
+    enter_description: "Propofol given to a vasoplegic patient before adrenaline"
+    baseline:
+      hr: 165
+      spo2: 62
+      nibp: { sys: 38, dia: 22, map: 28 }
+    events:
+      - at: 3s
+        text: "⚠ Profound hypotension after induction agent — circulation collapsing"
+    fail_when: "phase_elapsed > 45"
+    fail_description: "Vasodilators on top of anaphylactic shock — arrest within 45 seconds unless adrenaline is given"
+    fail_snap:
+      ecgRhythm: asystole
+      hr: 0
+      spo2: 0
+      nibp: { sys: 0, dia: 0, map: 0 }
+    fail_events:
+      - "❌ Cardiac arrest — anaphylactic shock deepened by propofol"
+
   - id: recovery
     label: "Recovery"
     enter_when: "any('adrenaline-*')"
@@ -71,11 +140,14 @@ phases:
       spo2: 99
       nibp: { sys: 125, dia: 78, map: 94 }
       etco2: 5.0
+    events:
+      - at: 120s
+        text: "⚠ BP holding only on adrenaline — circulating volume and oxygenation still inadequate"
     hints_if_missing:
       increase-fio2: "Consider high-flow oxygen"
       fluid-bolus: "Consider IV fluid bolus"
-    resolve_when: "phase_elapsed > 90"
-    resolve_description: "Vitals stabilise after 90 seconds"
+    resolve_when: "phase_elapsed > 90 && fio2 >= 0.8 && any('fluid-bolus') && any('stop-trigger')"
+    resolve_description: "Stabilises 90 seconds after the full bundle: trigger stopped + adrenaline + high-flow oxygen + fluids"
     resolve_events:
       - "✓ Patient stabilised after anaphylaxis treatment"
     resolve_snap:
@@ -111,5 +183,14 @@ triggering agent — in this case an IV antibiotic given at induction.
 ## Outcome modelled here
 
 - Recognising and giving adrenaline within ~30s pulls the patient back to a
-  recovery trajectory (HR 85, BP 125/78). Stabilisation takes ~90 seconds.
+  recovery trajectory (HR 85, BP 125/78).
+- Resolution requires the full bundle — **stop the trigger** plus adrenaline
+  plus high-flow oxygen (FiO₂ ≥ 0.8) plus an IV fluid bolus — then ~90 seconds
+  of stability. Adrenaline alone improves the numbers but does not complete
+  the case.
+- Giving **propofol** before adrenaline deepens the vasoplegia — the model
+  collapses faster and arrests within 45 seconds unless adrenaline follows.
 - Failure to give any adrenaline within 90 seconds → cardiac arrest.
+
+*Timeline compressed for drilling — real anaphylaxis evolves over 5–30
+minutes after exposure.*

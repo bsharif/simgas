@@ -61,4 +61,14 @@ describe('getRemoteStateApplication', () => {
       snapshot: snapshot('running', 45),
     })).toBe('skip-waveforms')
   })
+
+  it('resets (not rejects) when the trainer restarts the case and elapsed time rewinds to 0', () => {
+    expect(getRemoteStateApplication({
+      latestElapsedSeconds: 95,
+      hasReceivedState: true,
+      previousPhase: 'idle',
+      pendingRunStart: true,
+      snapshot: snapshot('running', 0),
+    })).toBe('reset')
+  })
 })

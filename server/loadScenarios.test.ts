@@ -38,13 +38,27 @@ describe('loadScenarios', () => {
           snap: { ecgRhythm: 'asystole', hr: 0, spo2: 0, nibp: { sys: 0, dia: 0, map: 0 } },
         },
         {
+          id: 'iatrogenic-collapse',
+          enterWhen: "any('propofol') && !any('adrenaline-*')",
+          failWhen: 'phase_elapsed > 45',
+        },
+        {
           id: 'recovery',
           enterWhen: "any('adrenaline-*')",
-          resolveWhen: 'phase_elapsed > 90',
+          resolveWhen: "phase_elapsed > 90 && fio2 >= 0.8 && any('fluid-bolus') && any('stop-trigger')",
           baseline: { hr: 85, spo2: 99, nibp: { sys: 125, dia: 78, map: 94 }, etco2: 5 },
           snap: { capnographyShape: 'normal' },
         },
       ],
     })
+  })
+
+  it('includes debrief body and rubric in the metadata sent to clients', () => {
+    const scenarios = loadScenarios()
+    const anaphylaxis = scenarios.find(entry => entry.scenario.id === 'anaphylaxis')
+
+    expect(anaphylaxis?.metadata.debriefBody).toContain('# Anaphylaxis')
+    expect(anaphylaxis?.metadata.qrh).toContain('Anaphylaxis')
+    expect(anaphylaxis?.metadata.rubric?.critical_actions?.map(action => action.id)).toContain('adrenaline-1|adrenaline-10')
   })
 })

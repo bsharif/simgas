@@ -16,11 +16,17 @@ import type { PatientState } from '../../patient'
  * Available variables (read from PredicateContext):
  *   time, phase_elapsed                — numbers (seconds)
  *   hr, spo2, etco2, rr, temp          — current vital values
- *   tube_position                       — string
+ *   nibp_sys, nibp_dia, nibp_map       — non-invasive BP components
+ *   fio2, vt, peep, gas_flow, sevoflurane — machine settings
+ *   vent_mode                          — string: 'ventilator' | 'manual'
+ *   manual_vent                        — bool: bag currently engaged
+ *   tube_position                      — string
+ *   capnography_shape                  — string: 'normal' | 'bronchospasm' | 'absent'
+ *   ecg_rhythm                         — string: 'sinus' | 'vf' | 'vt' | 'asystole' | 'svt'
  *
  * Available functions:
  *   any('id-glob')                     — bool: is any matching intervention in history?
- *   count('id')                        — number: applications of this intervention
+ *   count('id-glob')                   — number: applications matching the id/glob
  *   phase_done('id')                   — bool: has the named phase completed?
  *
  * Literals: numbers, single- or double-quoted strings, true / false.
@@ -292,7 +298,19 @@ function evalAst(ast: Ast, ctx: PredicateContext): number | string | boolean {
         case 'etco2': return ctx.state.etco2
         case 'rr': return ctx.state.rr
         case 'temp': return ctx.state.temp
+        case 'nibp_sys': return ctx.state.nibp.sys
+        case 'nibp_dia': return ctx.state.nibp.dia
+        case 'nibp_map': return ctx.state.nibp.map
+        case 'fio2': return ctx.state.fio2
+        case 'vt': return ctx.state.vt
+        case 'peep': return ctx.state.peep
+        case 'gas_flow': return ctx.state.gasFlow
+        case 'sevoflurane': return ctx.state.sevoflurane
+        case 'vent_mode': return ctx.state.ventilationMode
+        case 'manual_vent': return ctx.state.manualVentilationActive
         case 'tube_position': return ctx.state.tubePosition
+        case 'capnography_shape': return ctx.state.capnographyShape
+        case 'ecg_rhythm': return ctx.state.ecgRhythm
         default:
           throw new Error(`unknown identifier: ${ast.name}`)
       }
@@ -307,8 +325,8 @@ function evalAst(ast: Ast, ctx: PredicateContext): number | string | boolean {
         }
         case 'count': {
           if (ast.args.length !== 1) throw new Error(`count() takes 1 argument`)
-          const id = asString(evalAst(ast.args[0], ctx), `count()`)
-          return ctx.interventions.filter(x => x === id).length
+          const glob = asString(evalAst(ast.args[0], ctx), `count()`)
+          return ctx.interventions.filter(x => globMatch(glob, x)).length
         }
         case 'phase_done': {
           if (ast.args.length !== 1) throw new Error(`phase_done() takes 1 argument`)
@@ -355,4 +373,68 @@ export function evaluatePredicate(source: string, ctx: PredicateContext): boolea
 export function compilePredicate(source: string): (ctx: PredicateContext) => boolean {
   const ast = parsePredicate(source)
   return (ctx) => Boolean(evalAst(ast, ctx))
+}
+
+/** Variable names the evaluator understands. Kept in sync with evalAst's `var` case. */
+export const KNOWN_PREDICATE_VARIABLES: ReadonlySet<string> = new Set([
+  'time', 'phase_elapsed',
+  'hr', 'spo2', 'etco2', 'rr', 'temp',
+  'nibp_sys', 'nibp_dia', 'nibp_map',
+  'fio2', 'vt', 'peep', 'gas_flow', 'sevoflurane',
+  'vent_mode', 'manual_vent', 'tube_position', 'capnography_shape', 'ecg_rhythm',
+])
+
+/** Function names the evaluator understands. Kept in sync with evalAst's `call` case. */
+export const KNOWN_PREDICATE_FUNCTIONS: ReadonlySet<string> = new Set(['any', 'count', 'phase_done'])
+
+export interface PredicateStaticInfo {
+  /** Bare identifiers used as variables. */
+  variables: string[]
+  /** Function names called. */
+  functions: string[]
+  /** String-literal arguments to any()/count() — intervention ids or globs. */
+  interventionRefs: string[]
+  /** String-literal arguments to phase_done() — phase ids. */
+  phaseRefs: string[]
+}
+
+/**
+ * Statically inspect a predicate without evaluating it. Used by the scenario
+ * linter to catch unknown variables, functions, and dangling id references.
+ */
+export function inspectPredicate(source: string): PredicateStaticInfo {
+  const info: PredicateStaticInfo = { variables: [], functions: [], interventionRefs: [], phaseRefs: [] }
+  const walk = (ast: Ast): void => {
+    switch (ast.kind) {
+      case 'lit':
+        return
+      case 'var':
+        info.variables.push(ast.name)
+        return
+      case 'call': {
+        info.functions.push(ast.name)
+        const firstArg = ast.args[0]
+        if (firstArg && firstArg.kind === 'lit' && typeof firstArg.value === 'string') {
+          if (ast.name === 'any' || ast.name === 'count') info.interventionRefs.push(firstArg.value)
+          if (ast.name === 'phase_done') info.phaseRefs.push(firstArg.value)
+        }
+        for (const arg of ast.args) walk(arg)
+        return
+      }
+      case 'unary':
+        walk(ast.arg)
+        return
+      case 'binary':
+        walk(ast.left)
+        walk(ast.right)
+        return
+    }
+  }
+  walk(parsePredicate(source))
+  return info
+}
+
+/** Glob-match helper exposed for the linter (matches any()'s semantics). */
+export function matchesGlob(glob: string, value: string): boolean {
+  return globMatch(glob, value)
 }

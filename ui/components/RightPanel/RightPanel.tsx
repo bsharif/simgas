@@ -44,6 +44,11 @@ const syringeLabels: Record<string, SyringeLabelSpec> = {
     dose: '10 mcg IV',
     className: 'syringe-label--adrenaline',
   },
+  'adrenaline-cardiac': {
+    drugName: 'Adrenaline (Arrest)',
+    dose: '1 mg IV',
+    className: 'syringe-label--adrenaline',
+  },
   metaraminol: {
     drugName: 'Metaraminol',
     dose: '1 mg IV',
@@ -77,6 +82,31 @@ const syringeLabels: Record<string, SyringeLabelSpec> = {
   intralipid: {
     drugName: 'Intralipid 20%',
     dose: '100 ml IV',
+    className: 'syringe-label--misc',
+  },
+  suxamethonium: {
+    drugName: 'Suxamethonium',
+    dose: '1 mg/kg IV',
+    className: 'syringe-label--misc',
+  },
+  midazolam: {
+    drugName: 'Midazolam',
+    dose: '2 mg IV',
+    className: 'syringe-label--induction',
+  },
+  amiodarone: {
+    drugName: 'Amiodarone',
+    dose: '300 mg IV',
+    className: 'syringe-label--misc',
+  },
+  atropine: {
+    drugName: 'Atropine',
+    dose: '600 mcg IV',
+    className: 'syringe-label--vasopressor',
+  },
+  txa: {
+    drugName: 'Tranexamic Acid',
+    dose: '1 g IV',
     className: 'syringe-label--misc',
   },
 }

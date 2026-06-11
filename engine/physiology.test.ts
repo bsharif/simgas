@@ -118,3 +118,131 @@ describe('SimulationEngine modifier hook', () => {
     expect(seenHr.at(-1)).toBe(123)
   })
 })
+
+describe('SimulationEngine intervention history and manual ventilation', () => {
+  it('records timestamped intervention events', () => {
+    const fake = createRuntime()
+    const engine = new SimulationEngine({ runtime: fake.runtime })
+    engine.start(createScenario())
+    const [handle] = fake.scheduledHandles()
+    fake.runFrame(handle, 16)
+
+    engine.applyIntervention({
+      id: 'test-drug',
+      label: 'Test Drug',
+      category: 'drug',
+      description: '',
+      effect: { hrDelta: 5 },
+      durationMs: 0,
+      onsetMs: 0,
+    })
+
+    const events = engine.getInterventionEvents()
+    expect(events).toHaveLength(1)
+    expect(events[0].id).toBe('test-drug')
+    expect(events[0].atSec).toBeCloseTo(0.016, 3)
+  })
+
+  it('records realistic bag breaths as manual-vent interventions', () => {
+    const fake = createRuntime()
+    const engine = new SimulationEngine({ runtime: fake.runtime })
+    engine.start(createScenario())
+
+    engine.setManualVentilation(true)
+    engine.setManualVentilation(false)
+    // Within the debounce window — no second breath recorded.
+    fake.setNow(100)
+    engine.setManualVentilation(true)
+    engine.setManualVentilation(false)
+    // Past the debounce window — second breath recorded.
+    fake.setNow(1000)
+    engine.setManualVentilation(true)
+
+    expect(engine.interventionList.filter(id => id === 'manual-vent')).toHaveLength(2)
+    expect(engine.getDoseLedger().get('manual-vent')?.count).toBe(2)
+  })
+})
+
+describe('SimulationEngine learning modes', () => {
+  it('free play ignores scripted resolve/fail terminal states', () => {
+    const fake = createRuntime()
+    const scenario = createScenario()
+    scenario.check = () => ({ modifiers: {}, events: [], resolved: true, failed: false })
+    const engine = new SimulationEngine({ runtime: fake.runtime })
+    engine.setMode('free')
+
+    engine.start(scenario)
+    const [handle] = fake.scheduledHandles()
+    fake.runFrame(handle, 16)
+
+    expect(engine.phase).toBe('running')
+    // And the loop was not frozen (freeze() would cancel the frame).
+    expect(fake.cancelledHandles()).toHaveLength(0)
+  })
+
+  it('passes freePlay and suppressHints flags to the scenario context', () => {
+    const fake = createRuntime()
+    const scenario = createScenario()
+    const seenCtx: Array<{ freePlay?: boolean; suppressHints?: boolean }> = []
+    scenario.check = (_elapsed, _interventions, ctx) => {
+      seenCtx.push({ freePlay: ctx?.freePlay, suppressHints: ctx?.suppressHints })
+      return { modifiers: {}, events: [], resolved: false, failed: false }
+    }
+    const engine = new SimulationEngine({ runtime: fake.runtime })
+    engine.setMode('exam')
+
+    engine.start(scenario)
+    const [handle] = fake.scheduledHandles()
+    fake.runFrame(handle, 16)
+
+    expect(seenCtx.at(-1)).toEqual({ freePlay: false, suppressHints: true })
+  })
+})
+
+describe('SimulationEngine vitals history', () => {
+  it('records a sample on the terminal tick so the replay ends on the final state', () => {
+    const fake = createRuntime()
+    const scenario = createScenario()
+    scenario.check = (elapsed) => ({
+      modifiers: {},
+      events: [],
+      resolved: elapsed > 0.05,
+      failed: false,
+    })
+    const engine = new SimulationEngine({ runtime: fake.runtime })
+
+    engine.start(scenario)
+    const [handle] = fake.scheduledHandles()
+    fake.runFrame(handle, 16)
+    const [handle2] = fake.scheduledHandles()
+    fake.runFrame(handle2, 80)
+
+    expect(engine.phase).toBe('resolved')
+    const history = engine.getVitalsHistory()
+    expect(history.length).toBeGreaterThan(0)
+    expect(history.at(-1)!.hr).toBe(engine.state.hr)
+  })
+})
+
+describe('SimulationEngine obstructed airway', () => {
+  it('records but does not oxygenate bag breaths while the airway is obstructed', () => {
+    const fake = createRuntime()
+    const engine = new SimulationEngine({ runtime: fake.runtime })
+    engine.start(createScenario())
+    engine.state.airwayObstructed = true
+    engine.state.spo2 = 80
+    engine.state.fio2 = 1.0
+
+    engine.setManualVentilation(true)
+
+    expect(engine.interventionList).toContain('manual-vent')
+    expect(engine.state.spo2).toBe(80)
+
+    // Once the obstruction clears (e.g. cricothyroidotomy), breaths work again.
+    engine.setManualVentilation(false)
+    engine.state.airwayObstructed = false
+    fake.setNow(1000)
+    engine.setManualVentilation(true)
+    expect(engine.state.spo2).toBeGreaterThan(80)
+  })
+})

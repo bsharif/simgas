@@ -40,10 +40,26 @@ The codebase is split with a strict one-way dependency: **`ui/` imports from `en
 - `scenarios/index.ts` — loads `.md` scenarios via Vite's `import.meta.glob('../../scenarios/*.md', { query: '?raw', eager: true })`, parses each through the DSL, exports `ALL_SCENARIOS` + `SCENARIO_MAP`. Adding a scenario = drop a new `.md` file, no code changes.
 - `scenarios/dsl/` — the scenario DSL:
   - `schema.ts` — Zod schema for `ScenarioSpec`. Strict mode rejects unknown keys.
-  - `predicate.ts` — tokenizer + Pratt-style recursive-descent parser for `enter_when` / `resolve_when` / `fail_when` expressions. Variables: `time`, `phase_elapsed`, `hr`, `spo2`, `etco2`, `rr`, `temp`, `tube_position`. Functions: `any('id-glob')`, `count('id')`, `phase_done('id')`. Operators: `&& || ! == != < <= > >=`.
+  - `predicate.ts` — tokenizer + Pratt-style recursive-descent parser for `enter_when` / `resolve_when` / `fail_when` expressions. Variables: `time`, `phase_elapsed`, `hr`, `spo2`, `etco2`, `rr`, `temp`, `nibp_sys`, `nibp_dia`, `nibp_map`, `fio2`, `vt`, `peep`, `gas_flow`, `sevoflurane`, `vent_mode`, `manual_vent`, `tube_position`, `capnography_shape`, `ecg_rhythm`. Functions: `any('id-glob')`, `count('id-glob')`, `phase_done('id')`. Operators: `&& || ! == != < <= > >=`. Exposes `inspectPredicate` + `KNOWN_PREDICATE_VARIABLES`/`FUNCTIONS` for the linter.
   - `parse.ts` — splits YAML frontmatter from markdown body (10-line splitter, no gray-matter), validates via Zod, returns `{ spec, body }`.
   - `interpret.ts` — `specToScenario(spec)` returns a runtime Scenario whose `check` closure runs the phase machine. Phase selection rule: **last matching `enter_when` wins** (authors list phases from least- to most-specific).
 - `waveforms.ts` — pure sample generators. ECG morphology is a sum of Gaussian kernels per P/Q/R/S/T, switched by `EcgRhythm`. Called `SAMPLES_PER_TICK` (=2) times per frame from `physiology.ts`.
+- `rubric.ts` — pure rubric assessment. `evaluateRubric(rubric, interventionEvents)` classifies a scenario's `critical_actions`/`supporting_actions` as done/late/missed and `dangerous_actions` as performed/avoided, computes time-to-first-critical-action and an overall outcome. Action ids support globs and `'a|b'` alternation.
+
+### Engine extras worth knowing
+
+- The engine records `interventionEvents` (`{id, atSec}`) and a 1 Hz `vitalsHistory` per run — `getInterventionEvents()` / `getVitalsHistory()` feed the debrief rubric report and timeline replay.
+- Each delivered manual-bag breath is recorded as a `manual-vent` intervention, so `any('manual-vent')` predicates treat realistic bagging as management. When `state.airwayObstructed` is true (complete laryngospasm, CICO — set via scenario snaps), breaths are recorded but move no gas.
+- `engine.setMode('guided' | 'exam' | 'free')` is a first-class setting: exam suppresses scenario hints (via `ctx.suppressHints` in `Scenario.check`), free play skips scripted resolve/fail (via `ctx.freePlay` — the interpreter skips terminal checks, the engine ignores terminal flags).
+
+### Trainer–trainee mode (server/)
+
+`server/SimulationSession.ts` owns the authoritative engine per room. Key invariants:
+
+- Rooms open as a **waiting room** (`phase 'idle'`): nothing runs until the trainer sends `start_scenario`. Restarting mid-session resets event/action logs and re-broadcasts metadata.
+- Routine state broadcasts are throttled to 10 Hz (`publishAuthoritativeState`), but **terminal states and command-driven changes bypass the throttle** (`forceBroadcastState`) — see the review doc on terminal desync. A `session_summary` (vitals history + intervention events) is broadcast at terminal for remote debriefs.
+- Dose ledger, roster `connected` flags, and an actor-attributed action log (`action`/`action_log_snapshot`, trainer-only) are synced; `scenario_metadata` (including debrief body + rubric) goes to all clients.
+- `open_debrief` (trainer-only) broadcasts `debrief_open` so the trainer controls when the group debrief opens.
 
 ### Scenarios (`scenarios/`)
 
@@ -88,7 +104,7 @@ The engine maintains `state.driftBaseline` (a `Partial<DriftBaseline>`) alongsid
 
 ### Adding things
 
-- **New scenario**: drop a `.md` file in `/scenarios/`. `npm run lint:scenarios` validates it. No code changes.
+- **New scenario**: drop a `.md` file in `/scenarios/`. `npm run lint:scenarios` validates it (predicate syntax, known variables/functions, intervention/phase id refs, rubric ids, shadowed phases, duplicate event times, reachable ending). No code changes. Include the rubric fields (`learning_objectives`, `critical_actions`, `supporting_actions`, `dangerous_actions`, `references`, `author`, `last_reviewed`, plus `pack`/`qrh`) — see CONTRIBUTING.md for the clinical review checklist.
 - **New intervention**: append to `INTERVENTIONS` in `engine/interventions.ts`. Set `durationMs: 0, onsetMs: 0` for instant effects; otherwise the engine queues an `ActiveEffect` that applies `effect` once at `onsetMs`. Optional: `precondition: (state) => boolean` + `preconditionFailureEvent` for state-dependent gating (see `intubate` / `extubate`). Wire the id into the relevant panel in `ui/components/RightPanel/`.
 - **New machine setting**: extend the `Pick<PatientState, ...>` in both `SimulationEngine.updateMachineSettings` and `SimulationContext.updateMachineSettings`.
 - **New patient field**: add to `PatientState` and `createBaselineState`, then to `PatientModifier` + `applyModifier` if it should be scenario/intervention-controllable. If it should drift, extend `DriftBaseline` + `applyDrift`. If it should be readable in predicates, add a case in `predicate.ts`'s `var` evaluator.

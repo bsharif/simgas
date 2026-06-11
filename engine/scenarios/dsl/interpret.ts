@@ -99,6 +99,7 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
     if (snap.tubePosition !== undefined) target.tubePosition = snap.tubePosition
     if (snap.fio2 !== undefined) target.fio2 = snap.fio2
     if (snap.sevoflurane !== undefined) target.sevoflurane = snap.sevoflurane
+    if (snap.airwayObstructed !== undefined) target.airwayObstructed = snap.airwayObstructed
   }
 
   const initialModifiers: PatientModifier = {}
@@ -160,8 +161,9 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
 
     // Hints for missing interventions: fire once per phase if the intervention
     // hasn't been applied (we keep it simple — fire as soon as we're in the
-    // phase, the user's restart loop is short).
-    for (const [interventionId, hintText] of Object.entries(phase.hints_if_missing ?? {})) {
+    // phase, the user's restart loop is short). Suppressed entirely in exam /
+    // free-play mode (review Phase 4) — exam is a no-hint assessment.
+    for (const [interventionId, hintText] of Object.entries(ctx.suppressHints ? {} : phase.hints_if_missing ?? {})) {
       if (hintsFiredForPhase.has(interventionId)) continue
       if (!interventions.includes(interventionId)) {
         // Only fire once we've been in the phase a moment, so the UI doesn't
@@ -176,7 +178,11 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
       }
     }
 
-    // Terminal checks.
+    // Terminal checks. Skipped in free-play mode (review Phase 4): the phase
+    // machine keeps driving physiology, but nothing scripted ends the run.
+    if (ctx.freePlay) {
+      return { modifiers: mods, events, resolved: false, failed: false }
+    }
     if (compiled.failWhen && compiled.failWhen(phaseCtx)) {
       terminated = true
       forcedPhaseId = null
@@ -214,12 +220,29 @@ export function specToScenario(spec: ScenarioSpec): Scenario {
     forcedPhaseId = null
   }
 
+  const rubric = {
+    learning_objectives: spec.learning_objectives,
+    critical_actions: spec.critical_actions,
+    supporting_actions: spec.supporting_actions,
+    dangerous_actions: spec.dangerous_actions,
+    references: spec.references,
+    guideline_version: spec.guideline_version,
+    author: spec.author,
+    reviewers: spec.reviewers,
+    last_reviewed: spec.last_reviewed,
+    license: spec.license,
+  }
+  const hasRubric = Object.values(rubric).some(value => value !== undefined)
+
   return {
     id: spec.id,
     label: spec.label,
     description: spec.description,
     difficulty: spec.difficulty,
     hints: spec.hints,
+    pack: spec.pack,
+    qrh: spec.qrh,
+    rubric: hasRubric ? rubric : undefined,
     initialModifiers,
     check,
     reset,

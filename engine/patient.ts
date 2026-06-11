@@ -58,6 +58,12 @@ export interface PatientState {
   sevoflurane: number
   ventilationMode: 'ventilator' | 'manual'
   manualVentilationActive: boolean
+  /**
+   * True when the upper airway is obstructed (complete laryngospasm, CICO).
+   * While set, manual bag breaths are recorded but have no oxygenation
+   * effect — you cannot bag past a closed glottis.
+   */
+  airwayObstructed: boolean
   consciousness: Consciousness
   ecgRhythm: EcgRhythm
   capnographyShape: CapnographyShape
@@ -109,6 +115,7 @@ export function createBaselineState(): PatientState {
     sevoflurane: 2.0,
     ventilationMode: 'ventilator',
     manualVentilationActive: false,
+    airwayObstructed: false,
     consciousness: 'awake',
     ecgRhythm: 'sinus',
     capnographyShape: 'normal',

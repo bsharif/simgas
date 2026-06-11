@@ -1,18 +1,37 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { makeDoseLedger, type DoseEntry } from '../../engine/doseLedger'
+import { type DoseEntry } from '../../engine/doseLedger'
 import { createBaselineState, type PatientState } from '../../engine/patient'
 import type { Scenario } from '../../engine/scenario'
 import type { SimulationPhase } from '../../engine/physiology'
-import type { ClientMessage, MachineSettingsUpdate, RemotePatientSnapshot, ScenarioMetadataMessage, ServerMessage } from '../../shared/protocol'
+import type {
+  ActionLogEntry,
+  ClientMessage,
+  ErrorCode,
+  MachineSettingsUpdate,
+  RemotePatientSnapshot,
+  RosterEntry,
+  ScenarioMetadataMessage,
+  ServerMessage,
+  SessionSummaryMessage,
+} from '../../shared/protocol'
 import { RemoteWaveformStore } from '../remote/RemoteWaveformStore'
 import type { WebSocketClient, WebSocketConnectionStatus } from '../network/WebSocketClient'
+import { describeServerError } from '../network/errorMessages'
 import { SimulationBridgeProvider, type SimulationBridgeValue } from './SimulationBridge'
+
+export interface SessionError {
+  code: ErrorCode
+  message: string
+  /** True when the error arrived before the session was established — the
+   * user can't recover without going back to the lobby. */
+  fatal: boolean
+}
 
 interface RemoteSimulationContextValue {
   role: 'trainer' | 'trainee' | null
   sessionCode: string | null
-  roster: Array<{ id: string; name: string; role: 'trainer' | 'trainee' }>
+  roster: RosterEntry[]
   scenarioMetadata: ScenarioMetadataMessage | null
   connectionStatus: WebSocketConnectionStatus
   paused: boolean
@@ -20,6 +39,12 @@ interface RemoteSimulationContextValue {
   completedPhaseIds: string[]
   forcedPhaseId: string | null
   commandsAvailable: boolean
+  sessionError: SessionError | null
+  clearSessionError: () => void
+  actionLog: ActionLogEntry[]
+  sessionSummary: SessionSummaryMessage | null
+  /** Set when the trainer opens the shared debrief for the group. */
+  debriefOpen: boolean
   send: (message: ClientMessage) => boolean
 }
 
@@ -38,9 +63,12 @@ function scenarioFromMetadata(metadata: ScenarioMetadataMessage): Scenario {
   return {
     id: metadata.scenarioId,
     label: metadata.label,
-    description: '',
+    description: metadata.description ?? '',
     difficulty: 'medium',
     hints: [],
+    debriefBody: metadata.debriefBody,
+    qrh: metadata.qrh,
+    rubric: metadata.rubric,
     initialModifiers: {},
     check: () => ({ modifiers: {}, events: [], resolved: false, failed: false }),
   }
@@ -71,9 +99,11 @@ export function getRemoteStateApplication({
   pendingRunStart: boolean
   snapshot: Pick<RemotePatientSnapshot, 'phase' | 'elapsedSeconds'>
 }): RemoteStateApplication {
+  // A new-run snapshot (restart in the same session) legitimately rewinds
+  // elapsedSeconds to 0 — check for a run start before the staleness guard.
+  if (shouldResetRemoteWaveforms(previousPhase, snapshot, pendingRunStart)) return 'reset'
   if (snapshot.elapsedSeconds < latestElapsedSeconds) return 'reject'
   if (!hasReceivedState) return 'reset'
-  if (shouldResetRemoteWaveforms(previousPhase, snapshot, pendingRunStart)) return 'reset'
   if (snapshot.elapsedSeconds === latestElapsedSeconds) return 'skip-waveforms'
   return 'write'
 }
@@ -97,7 +127,14 @@ export function RemoteSimulationProvider({
   const [currentPhaseId, setCurrentPhaseId] = useState<string | null>(null)
   const [completedPhaseIds, setCompletedPhaseIds] = useState<string[]>([])
   const [forcedPhaseId, setForcedPhaseId] = useState<string | null>(null)
-  const doseLedger = useMemo<ReadonlyMap<string, DoseEntry>>(() => makeDoseLedger(), [])
+  // The authoritative dose ledger lives on the server engine; this mirror is
+  // updated from dose_ledger messages so cooldown/max-dose UI works remotely.
+  const [doseLedger, setDoseLedger] = useState<ReadonlyMap<string, DoseEntry>>(() => new Map())
+  const [sessionError, setSessionError] = useState<SessionError | null>(null)
+  const [actionLog, setActionLog] = useState<ActionLogEntry[]>([])
+  const [sessionSummary, setSessionSummary] = useState<SessionSummaryMessage | null>(null)
+  const [debriefOpen, setDebriefOpen] = useState(false)
+  const sessionEstablishedRef = useRef(false)
   const audioSubscribers = useRef(new Set<(state: PatientState) => void>())
   const stateRef = useRef(state)
   const latestElapsedSecondsRef = useRef(0)
@@ -116,9 +153,11 @@ export function RemoteSimulationProvider({
     if (initialMessage) client.send(initialMessage)
     const unsubscribe = client.onMessage(message => {
       if (message.type === 'session_created' || message.type === 'session_joined') {
+        sessionEstablishedRef.current = true
         setConnectionStatus('connected')
         setRole(message.role)
         setSessionCode(message.sessionCode)
+        setSessionError(null)
         return
       }
       if (message.type === 'session_info') {
@@ -170,9 +209,43 @@ export function RemoteSimulationProvider({
       if (message.type === 'phase_change') {
         if (phaseRef.current !== 'running' && message.phase === 'running') {
           resetWaveformsOnNextStateRef.current = true
+          // New run: clear the previous run's debrief artifacts.
+          setSessionSummary(null)
+          setDebriefOpen(false)
         }
         phaseRef.current = message.phase
         setPhase(message.phase)
+        return
+      }
+      if (message.type === 'dose_ledger') {
+        setDoseLedger(new Map(message.entries.map(entry => [
+          entry.id,
+          { count: entry.count, lastAppliedSec: entry.lastAppliedSec },
+        ])))
+        return
+      }
+      if (message.type === 'action') {
+        setActionLog(previous => [...previous, message.entry])
+        return
+      }
+      if (message.type === 'action_log_snapshot') {
+        setActionLog(message.entries)
+        return
+      }
+      if (message.type === 'session_summary') {
+        setSessionSummary(message)
+        return
+      }
+      if (message.type === 'debrief_open') {
+        setDebriefOpen(true)
+        return
+      }
+      if (message.type === 'error') {
+        setSessionError({
+          code: message.code,
+          message: describeServerError(message.code, message.message),
+          fatal: !sessionEstablishedRef.current,
+        })
         return
       }
       if (message.type === 'scenario_metadata') {
@@ -189,7 +262,11 @@ export function RemoteSimulationProvider({
 
   const commandsAvailable = connectionStatus === 'connected'
   const send = useCallback((message: ClientMessage) => client.send(message), [client])
-  const scenario = scenarioMetadata ? scenarioFromMetadata(scenarioMetadata) : null
+  const clearSessionError = useCallback(() => setSessionError(null), [])
+  const scenario = useMemo(
+    () => (scenarioMetadata ? scenarioFromMetadata(scenarioMetadata) : null),
+    [scenarioMetadata],
+  )
 
   const audioSource = useMemo(() => ({
     subscribe: (cb: (state: PatientState) => void) => {
@@ -228,6 +305,11 @@ export function RemoteSimulationProvider({
       completedPhaseIds,
       forcedPhaseId,
       commandsAvailable,
+      sessionError,
+      clearSessionError,
+      actionLog,
+      sessionSummary,
+      debriefOpen,
       send,
     }}>
       <SimulationBridgeProvider value={bridgeValue}>{children}</SimulationBridgeProvider>

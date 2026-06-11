@@ -1,4 +1,4 @@
-import { useState, type FC } from 'react'
+import { useEffect, useState, type FC } from 'react'
 import { useSimulation } from '../context/SimulationContext'
 import Monitor from '../components/Monitor/Monitor'
 import { MonitorSettingsButton } from '../components/Monitor/MonitorSettings'
@@ -18,6 +18,20 @@ const SimulationView: FC = () => {
   // run. Derived from scenario id rather than a useEffect/setState dance.
   const [debriefDismissedFor, setDebriefDismissedFor] = useState<string | null>(null)
   const debriefOpen = ended && scenario !== null && debriefDismissedFor !== scenario.id
+
+  // Accessibility: Space pauses/resumes without hunting for the small button
+  // (review: "Keyboard shortcuts for common actions").
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.tagName === 'BUTTON' || target.isContentEditable)) return
+      event.preventDefault()
+      togglePause()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [togglePause])
 
   return (
     <div style={{

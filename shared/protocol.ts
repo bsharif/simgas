@@ -1,5 +1,6 @@
 import type { CapnographyShape, EcgRhythm, PatientState } from '../engine/patient'
-import type { SimulationPhase } from '../engine/physiology'
+import type { InterventionEvent, SimulationPhase, VitalsSample } from '../engine/physiology'
+import type { ScenarioRubric } from '../engine/scenario'
 
 export type SessionRole = 'trainer' | 'trainee'
 
@@ -41,6 +42,13 @@ export interface ScenarioMetadataMessage {
   type: 'scenario_metadata'
   scenarioId: string
   label: string
+  description?: string
+  /** Markdown debrief body — safe teaching content, sent to every client. */
+  debriefBody?: string
+  /** QRH section reference, e.g. "3-4 Bronchospasm". */
+  qrh?: string
+  /** Clinical rubric used by remote debrief views. */
+  rubric?: ScenarioRubric
   phases: Array<{
     id: string
     label?: string
@@ -54,6 +62,35 @@ export interface ScenarioMetadataMessage {
     baseline?: unknown
     snap?: unknown
   }>
+}
+
+/** One attributed entry on the shared session action timeline. */
+export interface ActionLogEntry {
+  actorName: string
+  actorRole: SessionRole | 'system'
+  kind: 'intervention' | 'machine' | 'manual-vent' | 'note' | 'teaching-moment'
+  text: string
+  /** Simulation time in seconds when the action happened. */
+  atSec: number
+}
+
+/** Serialized dose ledger entry — drives cooldown/max-dose UI on remote clients. */
+export interface DoseLedgerEntryMessage {
+  id: string
+  count: number
+  lastAppliedSec: number
+}
+
+/**
+ * Sent once when a scenario reaches a terminal state. Carries everything the
+ * remote debrief views need: the recorded vitals history and the timestamped
+ * intervention list.
+ */
+export interface SessionSummaryMessage {
+  type: 'session_summary'
+  outcome: 'resolved' | 'failed'
+  vitalsHistory: VitalsSample[]
+  interventionEvents: InterventionEvent[]
 }
 
 export type ClientMessage =
@@ -75,6 +112,8 @@ export type ClientMessage =
   | { type: 'advance_phase'; phaseId: string }
   | { type: 'clear_forced_phase' }
   | { type: 'inject_event'; text: string }
+  | { type: 'add_note'; text: string; teaching?: boolean }
+  | { type: 'open_debrief' }
   | { type: 'pause' }
   | { type: 'resume' }
   | { type: 'end_session' }
@@ -83,6 +122,7 @@ export interface RosterEntry {
   id: string
   name: string
   role: SessionRole
+  connected: boolean
 }
 
 export type ServerMessage =
@@ -93,7 +133,11 @@ export type ServerMessage =
   | { type: 'state'; snapshot: RemotePatientSnapshot }
   | { type: 'event'; text: string }
   | { type: 'phase_change'; phase: SimulationPhase }
-  | { type: 'intervention_log'; text: string }
+  | { type: 'dose_ledger'; entries: DoseLedgerEntryMessage[] }
+  | { type: 'action'; entry: ActionLogEntry }
+  | { type: 'action_log_snapshot'; entries: ActionLogEntry[] }
+  | { type: 'debrief_open' }
+  | SessionSummaryMessage
   | ScenarioMetadataMessage
   | { type: 'error'; code: ErrorCode; message?: string }
 

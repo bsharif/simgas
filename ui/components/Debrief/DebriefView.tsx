@@ -2,6 +2,9 @@ import type { FC } from 'react'
 import { useSimulation } from '../../context/SimulationContext'
 import { INTERVENTION_MAP } from '../../../engine/interventions'
 import { renderDebriefMarkdown } from './markdown'
+import RubricReport from './RubricReport'
+import { exportRubricSummary } from './summaryExport'
+import VitalsTimeline from './VitalsTimeline'
 
 /**
  * Post-scenario debrief view (Phase 3.8). Shows the scenario outcome, a
@@ -21,6 +24,8 @@ const DebriefView: FC<{ onClose: () => void }> = ({ onClose }) => {
   // engine.interventionList is the canonical full-history list (React state
   // may have been throttled). Snapshot once for stable rendering.
   const interventionList = Array.from(engine.interventionList)
+  const interventionEvents = engine.getInterventionEvents()
+  const vitalsHistory = engine.getVitalsHistory()
   const html = scenario.debriefBody ? renderDebriefMarkdown(scenario.debriefBody) : ''
 
   return (
@@ -65,6 +70,32 @@ const DebriefView: FC<{ onClose: () => void }> = ({ onClose }) => {
             }}
           >×</button>
         </header>
+
+        {scenario.rubric?.learning_objectives && scenario.rubric.learning_objectives.length > 0 && (
+          <section style={{ marginBottom: 22 }}>
+            <h2 style={{ fontSize: 14, color: '#666', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+              Learning objectives
+            </h2>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#333', lineHeight: 1.6 }}>
+              {scenario.rubric.learning_objectives.map((objective, index) => (
+                <li key={index}>{objective}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {scenario.rubric && (
+          <RubricReport rubric={scenario.rubric} interventionEvents={interventionEvents} />
+        )}
+
+        {vitalsHistory.length > 1 && (
+          <section style={{ marginBottom: 22 }}>
+            <h2 style={{ fontSize: 14, color: '#666', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+              Timeline replay
+            </h2>
+            <VitalsTimeline history={vitalsHistory} interventions={interventionEvents} />
+          </section>
+        )}
 
         <section style={{ marginBottom: 22 }}>
           <h2 style={{ fontSize: 14, color: '#666', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
@@ -123,6 +154,23 @@ const DebriefView: FC<{ onClose: () => void }> = ({ onClose }) => {
         )}
 
         <footer style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => {
+              const summary = exportRubricSummary(
+                scenario.label,
+                failed ? 'failed' : 'resolved',
+                scenario.rubric,
+                interventionEvents,
+              )
+              void navigator.clipboard?.writeText(summary)
+            }}
+            style={{
+              padding: '9px 18px', border: '1px solid #d8d4ca', borderRadius: 6,
+              background: '#fff', cursor: 'pointer', fontSize: 14, color: '#666',
+            }}
+          >
+            Copy summary
+          </button>
           <button
             onClick={onClose}
             style={{

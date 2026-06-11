@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react'
-import { SimulationEngine, type SimulationPhase } from '../../engine/physiology'
+import { SimulationEngine, type SimulationMode, type SimulationPhase } from '../../engine/physiology'
 import { SCENARIO_MAP, ALL_SCENARIOS } from '../../engine/scenarios/index'
 import { parseScenarioFile } from '../../engine/scenarios/dsl/parse'
 import { specToScenario } from '../../engine/scenarios/dsl/interpret'
@@ -10,7 +10,7 @@ import type { PatientState } from '../../engine/patient'
 import type { Scenario } from '../../engine/scenario'
 import { SimulationBridgeProvider, type SimulationBridgeValue } from './SimulationBridge'
 
-type Mode = 'guided' | 'exam' | 'free'
+type Mode = SimulationMode
 
 interface SimulationContextValue {
   state: PatientState
@@ -65,7 +65,15 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   }, [])
   const [state, setState] = useState<PatientState>(engine.state)
   const [eventLog, setEventLog] = useState<string[]>([])
-  const [mode, setMode] = useState<Mode>('guided')
+  const [mode, setModeState] = useState<Mode>('guided')
+
+  // Mode is a first-class engine setting (review Phase 4): the engine
+  // suppresses hints in exam mode and skips scripted terminal conditions in
+  // free play, so the UI label and the simulation behavior can't drift apart.
+  const setMode = useCallback((next: Mode) => {
+    engine.setMode(next)
+    setModeState(next)
+  }, [engine])
   const [scenario, setScenario] = useState<Scenario | null>(null)
   const [paused, setPaused] = useState(false)
   const [phase, setPhase] = useState<SimulationPhase>(engine.phase)

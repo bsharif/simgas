@@ -75,16 +75,34 @@ network needed once the page is loaded.
 - **Hear alarms** when vitals stray outside safe ranges. Priorities
   escalate (cyan → yellow → red) with realistic beep patterns, and you
   can mute them for two minutes at a time.
-- **Run three built-in scenarios** out of the box: anaphylaxis,
-  oesophageal intubation, malignant hyperthermia. Three modes — guided
-  (with hints), exam (no hints), free play (sandbox).
+- **Run fifteen built-in scenarios** out of the box — anaphylaxis,
+  bronchospasm, laryngospasm, oesophageal intubation, CICO (can't intubate
+  can't oxygenate), aspiration on induction, malignant hyperthermia,
+  haemorrhagic shock, high spinal, LAST, venous gas embolism, severe
+  bradycardia, SVT, tension pneumothorax, VF arrest — grouped into teaching
+  packs. Completion requires clinically coherent management bundles, harmful
+  actions have physiological consequences (unsynchronised shock on SVT
+  induces VF; bagging a tension pneumothorax accelerates the collapse), and
+  three modes carry real semantics: guided (progressive hints), exam (no
+  hints, structured scoring afterwards), free play (sandbox — scripted
+  endings disabled).
+- **Teach a group with trainer–trainee rooms** — host a room on your
+  laptop, trainees join from phones via a 6-character code or QR, you
+  control when the case starts, override physiology, inject events, take
+  notes, and open a shared debrief when it ends. See
+  [docs/local-network-setup.md](docs/local-network-setup.md).
 - **Reconfigure the monitor display** — toggle traces on or off, switch
   between Default / Cardiac / Neuro presets, your choices persist.
-- **Review your run** — when a scenario ends, a debrief panel lists every
-  intervention you applied, the full event log, and the scenario's
-  teaching content rendered from markdown.
+- **Review your run** — when a scenario ends, the debrief shows a
+  structured assessment against the scenario's clinical rubric (critical
+  actions done / late / missed, harmful actions, time-to-action), a
+  replayable vitals timeline with intervention markers, every
+  intervention applied, the full event log, and the scenario's teaching
+  content. One click copies a markdown summary for teaching records.
 - **Write your own scenarios** as Markdown files — no programming required
-  (see below).
+  (see below). Scenario frontmatter now supports a clinical rubric
+  (`critical_actions`, `dangerous_actions`, references, reviewers) used
+  by the assessment debrief.
 
 ---
 
@@ -358,6 +376,13 @@ Other static hosts that work out of the box: **Vercel**, **Cloudflare Pages**,
 **GitHub Pages**, **AWS S3 + CloudFront**, your own nginx box. All you need
 is something that serves `index.html` with the assets next to it.
 
+> **Note:** static hosting covers **solo practice only**. The
+> trainer–trainee rooms need the small Node server (`npm start`), which
+> serves the same static bundle *plus* the realtime session socket. For a
+> teaching room on a local network, follow
+> [docs/local-network-setup.md](docs/local-network-setup.md) — it's one
+> command and works offline.
+
 ### Configuring for a non-root path
 
 If you're hosting at e.g. `example.com/simgas/` rather than the root, set
@@ -521,12 +546,26 @@ Tracked in detail under [`docs/superpowers/plans/`](docs/superpowers/plans/).
   (ECG, pleth, CO₂, resp, arterial, CVP, BIS), dose tracking with
   cooldown, Web Audio alarms with priority escalation, post-scenario
   debrief view.
-- **v0.5.0 — Realtime multi-user.** Supabase Realtime rooms with
-  instructor / learner / observer roles, leader-server hybrid model,
-  deterministic local waveform regeneration.
+- **v0.5.0 — Realtime multi-user.** Server-backed trainer–trainee rooms
+  over WebSocket: join codes + QR invites, authoritative server engine,
+  trainer overrides and event injection, reconnect tokens, deterministic
+  local waveform regeneration.
+- **v0.6.0 — Teaching workflow.** Waiting room with explicit case start,
+  visible join/create errors, synced dose ledger and roster connection
+  state, attributed action timeline, trainer notes and teaching moments,
+  shared remote debrief with trainer-controlled reveal, clinical rubric
+  layer (critical/supporting/dangerous actions) with structured
+  assessment, vitals timeline replay, bundle-based scenario completion,
+  real guided/exam/free-play semantics, stricter scenario linting.
 
 ## License and attribution
 
-The syringe labelling reference PDF is included for local design
-reference. The app uses synthetic data and does not contain
+SimGas code and the built-in scenario content are released under the
+[MIT License](LICENSE). The QRH excerpt under `docs/QRH.md` is © the
+Association of Anaesthetists (CC BY-NC-SA 4.0) and is included for
+reference only. The syringe labelling reference PDF is included for local
+design reference. The app uses synthetic data and does not contain
 patient-identifiable information.
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md), including
+the clinical review checklist for scenario PRs.

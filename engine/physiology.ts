@@ -6,6 +6,35 @@ import { generateECGSample, generateSpO2Sample, generateETCO2Sample, generateRes
 
 export type SimulationPhase = 'idle' | 'running' | 'resolved' | 'failed'
 
+/**
+ * Learning mode semantics (review Phase 4):
+ * - guided: hints shown, scripted terminal conditions active.
+ * - exam: no hints during the case; feedback comes from the debrief.
+ * - free: sandbox — scripted resolve/fail conditions are skipped entirely.
+ */
+export type SimulationMode = 'guided' | 'exam' | 'free'
+
+/** Timestamped intervention record, used by the rubric debrief. */
+export interface InterventionEvent {
+  id: string
+  atSec: number
+}
+
+/** 1 Hz vitals sample for the debrief timeline replay. */
+export interface VitalsSample {
+  atSec: number
+  hr: number
+  spo2: number
+  etco2: number
+  rr: number
+  temp: number
+  nibpSys: number
+  nibpDia: number
+}
+
+/** Cap the history at one hour of samples — far beyond any scenario length. */
+const MAX_HISTORY_SAMPLES = 3600
+
 type StateSubscriber = (state: PatientState) => void
 type EventSubscriber = (event: string) => void
 type PhaseSubscriber = (phase: SimulationPhase) => void
@@ -43,10 +72,16 @@ export class SimulationEngine {
   private rafId: unknown | null = null
   private lastTimestamp = 0
   private interventions: string[] = []
+  private interventionEvents: InterventionEvent[] = []
+  private vitalsHistory: VitalsSample[] = []
+  private lastHistorySampleSec = -1
   private doseLedger = makeDoseLedger()
   private _paused = false
   private _phase: SimulationPhase = 'idle'
-  private lastManualBreathMs = 0
+  private _mode: SimulationMode = 'guided'
+  // -Infinity so the very first squeeze always lands, even when the runtime
+  // clock starts near zero (tests, fresh page loads).
+  private lastManualBreathMs = -Infinity
   private runtime: EngineRuntime
   private modifierHook: ModifierHook | null
   private static readonly MANUAL_BREATH_DEBOUNCE_MS = 600
@@ -64,9 +99,13 @@ export class SimulationEngine {
     this.appliedScenarioModifiers = false
     this.activeEffects = []
     this.interventions = []
+    this.interventionEvents = []
+    this.vitalsHistory = []
+    this.lastHistorySampleSec = -1
     this.doseLedger = makeDoseLedger()
     this.activeScenario = scenario
     this._paused = false
+    this.lastManualBreathMs = -Infinity
     if (scenario.reset) scenario.reset()
     // Apply initial modifiers eagerly so the prefill uses the correct starting state.
     // The tick loop checks appliedScenarioModifiers and will skip re-applying them.
@@ -133,6 +172,28 @@ export class SimulationEngine {
     return this.interventions
   }
 
+  /** Timestamped intervention history for the rubric debrief. */
+  getInterventionEvents(): readonly InterventionEvent[] {
+    return this.interventionEvents
+  }
+
+  /** 1 Hz vitals samples recorded during the run, for timeline replay. */
+  getVitalsHistory(): readonly VitalsSample[] {
+    return this.vitalsHistory
+  }
+
+  get mode(): SimulationMode {
+    return this._mode
+  }
+
+  /**
+   * Set the learning mode. Takes effect on the next tick — exam suppresses
+   * scenario hints, free play disables scripted resolve/fail conditions.
+   */
+  setMode(mode: SimulationMode): void {
+    this._mode = mode
+  }
+
   applyIntervention(intervention: Intervention): void {
     if (this._phase !== 'running') return
 
@@ -155,6 +216,7 @@ export class SimulationEngine {
     }
 
     this.interventions.push(intervention.id)
+    this.interventionEvents.push({ id: intervention.id, atSec: elapsedSec })
     recordDose(this.doseLedger, intervention.id, elapsedSec)
 
     if (intervention.durationMs > 0) {
@@ -215,8 +277,25 @@ export class SimulationEngine {
    * One bag squeeze: SpO2 trends toward an FiO2-derived ceiling, ETCO2 trends
    * toward 5.0 kPa. Small per-breath nudges so several breaths are needed to
    * fully recover hypoxia/hypercapnia — matches realistic bag ventilation.
+   *
+   * Each delivered breath is also recorded as a 'manual-vent' intervention so
+   * scenario predicates (`any('manual-vent')`, `count('manual-vent')`) treat
+   * realistic bagging as first-class management, not just the abstract button.
    */
   private applyManualBreath(): void {
+    if (this._phase === 'running') {
+      const elapsedSec = this.elapsedMs / 1000
+      this.interventions.push('manual-vent')
+      this.interventionEvents.push({ id: 'manual-vent', atSec: elapsedSec })
+      recordDose(this.doseLedger, 'manual-vent', elapsedSec)
+      this.broadcastDoseLedger()
+    }
+
+    // You cannot bag past a closed glottis: with an obstructed airway
+    // (complete laryngospasm, CICO) the squeeze is recorded but no gas moves.
+    if (this.state.airwayObstructed) {
+      return
+    }
     const spo2Ceiling = 92 + this.state.fio2 * 8 // fio2 0.21 → 93.7; fio2 1.0 → 100
     const spo2Gap = spo2Ceiling - this.state.spo2
     this.state.spo2 = Math.max(0, Math.min(100, this.state.spo2 + spo2Gap * 0.15))
@@ -272,7 +351,11 @@ export class SimulationEngine {
       const update = this.activeScenario.check(
         this.elapsedMs / 1000,
         this.interventions,
-        { state: this.state },
+        {
+          state: this.state,
+          freePlay: this._mode === 'free',
+          suppressHints: this._mode !== 'guided',
+        },
       )
       applyModifier(this.state, update.modifiers)
 
@@ -280,10 +363,13 @@ export class SimulationEngine {
         this.broadcastEvent(event)
       }
 
-      if (update.resolved) {
-        scenarioEnded = 'resolved'
-      } else if (update.failed) {
-        scenarioEnded = 'failed'
+      // Free play is a sandbox: scripted terminal conditions never end the run.
+      if (this._mode !== 'free') {
+        if (update.resolved) {
+          scenarioEnded = 'resolved'
+        } else if (update.failed) {
+          scenarioEnded = 'failed'
+        }
       }
     }
 
@@ -319,6 +405,24 @@ export class SimulationEngine {
     }
 
     const elapsedSec = this.elapsedMs / 1000
+
+    // Record a 1 Hz vitals sample for the debrief timeline. Also force a
+    // sample on the terminal tick so the replay ends on the final state.
+    const sampleSec = Math.floor(elapsedSec)
+    if ((sampleSec > this.lastHistorySampleSec || scenarioEnded) && this.vitalsHistory.length < MAX_HISTORY_SAMPLES) {
+      this.lastHistorySampleSec = sampleSec
+      this.vitalsHistory.push({
+        atSec: scenarioEnded ? elapsedSec : sampleSec,
+        hr: this.state.hr,
+        spo2: this.state.spo2,
+        etco2: this.state.etco2,
+        rr: this.state.rr,
+        temp: this.state.temp,
+        nibpSys: this.state.nibp.sys,
+        nibpDia: this.state.nibp.dia,
+      })
+    }
+
     for (let i = 0; i < SAMPLES_PER_TICK; i++) {
       const t = elapsedSec + (i / SAMPLES_PER_TICK) * (deltaMs / 1000)
       const ecgVal = generateECGSample(t, this.state.hr, this.state.ecgRhythm)

@@ -13,11 +13,29 @@ export interface ServerScenario {
   metadata: ScenarioMetadataMessage
 }
 
-function toMetadata(spec: ScenarioSpec): ScenarioMetadataMessage {
+function toMetadata(spec: ScenarioSpec, debriefBody: string): ScenarioMetadataMessage {
+  const rubric = {
+    learning_objectives: spec.learning_objectives,
+    critical_actions: spec.critical_actions,
+    supporting_actions: spec.supporting_actions,
+    dangerous_actions: spec.dangerous_actions,
+    references: spec.references,
+    guideline_version: spec.guideline_version,
+    author: spec.author,
+    reviewers: spec.reviewers,
+    last_reviewed: spec.last_reviewed,
+    license: spec.license,
+  }
+  const hasRubric = Object.values(rubric).some(value => value !== undefined)
+
   return {
     type: 'scenario_metadata',
     scenarioId: spec.id,
     label: spec.label,
+    description: spec.description,
+    debriefBody,
+    qrh: spec.qrh,
+    rubric: hasRubric ? rubric : undefined,
     phases: spec.phases.map(phase => ({
       id: phase.id,
       label: phase.label,
@@ -54,7 +72,7 @@ export function loadScenarios(rootDir = process.cwd()): ServerScenario[] {
       scenario,
       spec,
       debriefBody: body,
-      metadata: toMetadata(spec),
+      metadata: toMetadata(spec, body),
     }
   })
 }

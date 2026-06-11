@@ -1,7 +1,16 @@
 import { randomBytes } from 'node:crypto'
 import { SimulationEngine } from '../engine/physiology'
 import { INTERVENTION_MAP, type PatientModifier } from '../engine/interventions'
-import type { ClientMessage, ErrorCode, RemotePatientSnapshot, ServerMessage, SessionRole } from '../shared/protocol'
+import type {
+  ActionLogEntry,
+  ClientMessage,
+  DoseLedgerEntryMessage,
+  ErrorCode,
+  RemotePatientSnapshot,
+  ServerMessage,
+  SessionRole,
+  SessionSummaryMessage,
+} from '../shared/protocol'
 import type { SimulationPhase } from '../engine/physiology'
 import { loadScenarios } from './loadScenarios'
 import { serializeState } from './serializeState'
@@ -42,6 +51,8 @@ const TRAINER_ONLY_MESSAGES = new Set<ClientMessage['type']>([
   'advance_phase',
   'clear_forced_phase',
   'inject_event',
+  'add_note',
+  'open_debrief',
   'pause',
   'resume',
   'end_session',
@@ -49,6 +60,8 @@ const TRAINER_ONLY_MESSAGES = new Set<ClientMessage['type']>([
 
 export class SimulationSession {
   readonly code: string
+  /** Scenario selected at room creation. The room does NOT auto-start it —
+   * the trainer starts the case explicitly from the waiting room. */
   readonly scenarioId: string | null
   readonly createdAt: number
   lastEmptyAt: number | null = null
@@ -59,8 +72,13 @@ export class SimulationSession {
   private clients = new Map<string, ClientRecord>()
   private tokenToClientId = new Map<string, string>()
   private eventLog: string[] = []
+  private actionLog: ActionLogEntry[] = []
   private lastSnapshot: RemotePatientSnapshot | null = null
   private lastStateBroadcastAt: number | null = null
+  private lastDoseLedger: DoseLedgerEntryMessage[] = []
+  private lastSummary: SessionSummaryMessage | null = null
+  private currentMetadata: ServerMessage | null = null
+  private currentScenarioId: string | null
   private engine: SimulationEngine | null = null
   private runtime: IntervalRuntime
   private trainerOverride: PatientModifier | null = null
@@ -68,6 +86,7 @@ export class SimulationSession {
   constructor(options: SimulationSessionOptions) {
     this.code = options.code
     this.scenarioId = options.scenarioId
+    this.currentScenarioId = options.scenarioId
     this.now = options.now ?? Date.now
     this.runtime = {
       now: this.now,
@@ -87,9 +106,8 @@ export class SimulationSession {
     this.lastEmptyAt = null
     send({ type: 'session_created', sessionCode: this.code, role: 'trainer', token: trainer.token })
     this.sendSessionInfo(trainer)
-    if (this.scenarioId) {
-      this.startScenario(this.scenarioId)
-    }
+    // The room opens as a waiting room (phase 'idle'). The trainer starts the
+    // case explicitly with a start_scenario command once learners have joined.
     return { clientId: trainer.id, token: trainer.token }
   }
 
@@ -101,8 +119,7 @@ export class SimulationSession {
     const trainee = this.createRecord('trainee', name, send)
     send({ type: 'session_joined', sessionCode: this.code, role: 'trainee', token: trainee.token })
     this.sendSessionInfo(trainee)
-    send({ type: 'event_log_snapshot', events: [...this.eventLog] })
-    if (this.lastSnapshot) send({ type: 'state', snapshot: this.lastSnapshot })
+    this.sendCatchUp(trainee)
     this.broadcastSessionInfo()
     return { ok: true, clientId: trainee.id, token: trainee.token }
   }
@@ -115,10 +132,14 @@ export class SimulationSession {
     client.send = send
     client.connected = true
     this.lastEmptyAt = null
-    send({ type: 'event_log_snapshot', events: [...this.eventLog] })
-    if (this.lastSnapshot) send({ type: 'state', snapshot: this.lastSnapshot })
-    this.sendSessionInfo(client)
+    this.sendCatchUp(client)
     send({ type: 'phase_change', phase: this.phase })
+    if (client.role === 'trainer' && this.actionLog.length > 0) {
+      send({ type: 'action_log_snapshot', entries: [...this.actionLog] })
+    }
+    // Refresh everyone's roster (including this client) with the new
+    // connected flag.
+    this.broadcastSessionInfo()
 
     return { ok: true, clientId: client.id, token: client.token }
   }
@@ -130,6 +151,8 @@ export class SimulationSession {
     if (![...this.clients.values()].some(entry => entry.connected)) {
       this.lastEmptyAt = this.now()
     }
+    // Keep every screen's roster truthful about who is actually connected.
+    this.broadcastSessionInfo()
   }
 
   markEmpty(): void {
@@ -150,6 +173,7 @@ export class SimulationSession {
   broadcastState(snapshot: RemotePatientSnapshot): void {
     this.lastSnapshot = snapshot
     this.phase = snapshot.phase
+    this.lastStateBroadcastAt = this.now()
     this.broadcast({ type: 'state', snapshot })
   }
 
@@ -168,11 +192,26 @@ export class SimulationSession {
     return this.lastSnapshot
   }
 
+  /**
+   * Bypass the 10 Hz throttle. Used for command-driven state changes and
+   * terminal states — discrete transitions every client must see immediately
+   * (review: "Remote terminal state can desynchronize").
+   */
+  private forceBroadcastState(): void {
+    if (!this.engine) return
+    this.broadcastState(serializeState(this.engine))
+  }
+
+  private recordAction(entry: ActionLogEntry): void {
+    this.actionLog.push(entry)
+    this.sendToRole('trainer', { type: 'action', entry })
+  }
+
   handleClientMessage(clientId: string, message: ClientMessage): void {
     const client = this.clients.get(clientId)
     if (!client) return
     if (client.role !== 'trainer' && TRAINER_ONLY_MESSAGES.has(message.type)) {
-      client.send({ type: 'error', code: 'unauthorized' })
+      client.send({ type: 'error', code: 'unauthorized', message: 'Only the trainer can do that.' })
       return
     }
 
@@ -183,20 +222,55 @@ export class SimulationSession {
 
     if (message.type === 'intervene') {
       const intervention = INTERVENTION_MAP.get(message.interventionId)
-      if (intervention) {
-        this.engine?.applyIntervention(intervention)
-        this.sendToRole('trainer', { type: 'intervention_log', text: `${client.name} applied ${intervention.label}` })
+      if (intervention && this.engine) {
+        const before = this.engine.interventionList.length
+        this.engine.applyIntervention(intervention)
+        const accepted = this.engine.interventionList.length > before
+        if (accepted) {
+          this.recordAction({
+            actorName: client.name,
+            actorRole: client.role,
+            kind: 'intervention',
+            text: intervention.label,
+            atSec: this.engine.elapsedSeconds,
+          })
+        }
+        this.forceBroadcastState()
       }
       return
     }
 
     if (message.type === 'update_machine_settings') {
-      this.engine?.updateMachineSettings(message.settings)
+      if (this.engine) {
+        this.engine.updateMachineSettings(message.settings)
+        this.recordAction({
+          actorName: client.name,
+          actorRole: client.role,
+          kind: 'machine',
+          text: Object.entries(message.settings)
+            .map(([key, value]) => `${key} → ${typeof value === 'number' ? Number(value.toFixed(2)) : value}`)
+            .join(', '),
+          atSec: this.engine.elapsedSeconds,
+        })
+        this.forceBroadcastState()
+      }
       return
     }
 
     if (message.type === 'set_manual_ventilation') {
-      this.engine?.setManualVentilation(message.active)
+      if (this.engine) {
+        this.engine.setManualVentilation(message.active)
+        if (message.active) {
+          this.recordAction({
+            actorName: client.name,
+            actorRole: client.role,
+            kind: 'manual-vent',
+            text: 'Manual ventilation (bag squeezed)',
+            atSec: this.engine.elapsedSeconds,
+          })
+        }
+        this.forceBroadcastState()
+      }
       return
     }
 
@@ -228,9 +302,32 @@ export class SimulationSession {
       return
     }
 
+    if (message.type === 'add_note') {
+      this.recordAction({
+        actorName: client.name,
+        actorRole: client.role,
+        kind: message.teaching ? 'teaching-moment' : 'note',
+        text: message.text,
+        atSec: this.engine?.elapsedSeconds ?? 0,
+      })
+      return
+    }
+
+    if (message.type === 'open_debrief') {
+      this.broadcast({ type: 'debrief_open' })
+      return
+    }
+
     if (message.type === 'end_session') {
-      this.engine?.stop()
-      this.markTerminal('failed')
+      if (this.engine && this.phase === 'running') {
+        this.publishSummary('failed')
+        this.engine.stop()
+        this.recordEvent('■ Session ended by trainer')
+        this.markTerminal('failed')
+      } else {
+        this.engine?.stop()
+        this.markTerminal('failed')
+      }
       return
     }
 
@@ -258,31 +355,79 @@ export class SimulationSession {
     return record
   }
 
+  /** Bring a (re)joining client up to date with the session's current state. */
+  private sendCatchUp(client: ClientRecord): void {
+    client.send({ type: 'event_log_snapshot', events: [...this.eventLog] })
+    if (this.currentMetadata) client.send(this.currentMetadata)
+    if (this.lastSnapshot) client.send({ type: 'state', snapshot: this.lastSnapshot })
+    if (this.lastDoseLedger.length > 0) client.send({ type: 'dose_ledger', entries: [...this.lastDoseLedger] })
+    if (this.lastSummary) client.send(this.lastSummary)
+  }
+
+  private publishSummary(outcome: 'resolved' | 'failed'): void {
+    if (!this.engine) return
+    const summary: SessionSummaryMessage = {
+      type: 'session_summary',
+      outcome,
+      vitalsHistory: [...this.engine.getVitalsHistory()],
+      interventionEvents: [...this.engine.getInterventionEvents()],
+    }
+    this.lastSummary = summary
+    this.broadcast(summary)
+  }
+
   private startScenario(scenarioId: string): void {
     const serverScenario = loadScenarios().find(entry => entry.scenario.id === scenarioId)
     if (!serverScenario) {
-      this.broadcast({ type: 'error', code: 'not_found' })
+      this.sendToRole('trainer', { type: 'error', code: 'not_found', message: `Unknown scenario '${scenarioId}'.` })
       return
     }
 
+    // Restarting (same or different case) clears the previous run's record.
     this.engine?.stop()
+    this.eventLog = []
+    this.actionLog = []
+    this.lastSummary = null
+    this.terminalAt = null
+    this.currentScenarioId = scenarioId
+    this.broadcast({ type: 'event_log_snapshot', events: [] })
+    this.sendToRole('trainer', { type: 'action_log_snapshot', entries: [] })
+
     const engine = new SimulationEngine({
       runtime: this.runtime,
       modifierHook: () => this.trainerOverride,
     })
     this.engine = engine
     this.lastStateBroadcastAt = null
+    this.lastDoseLedger = []
     engine.subscribe(() => this.publishAuthoritativeState(serializeState(engine)))
     engine.onEvent(event => this.recordEvent(event))
+    engine.onDoseLedgerChange(ledger => {
+      this.lastDoseLedger = [...ledger.entries()].map(([id, entry]) => ({
+        id,
+        count: entry.count,
+        lastAppliedSec: entry.lastAppliedSec,
+      }))
+      this.broadcast({ type: 'dose_ledger', entries: [...this.lastDoseLedger] })
+    })
     engine.onPhaseChange(phase => {
       this.phase = phase
-      this.broadcast({ type: 'phase_change', phase })
       if (phase === 'resolved' || phase === 'failed') {
+        // Terminal state must reach every client even if the last routine
+        // broadcast landed inside the throttle window: force the final
+        // snapshot (now carrying the terminal phase) before the phase event.
+        this.forceBroadcastState()
+        this.broadcast({ type: 'phase_change', phase })
+        this.publishSummary(phase)
         this.terminalAt = this.now()
+      } else {
+        this.broadcast({ type: 'phase_change', phase })
       }
     })
-    this.sendToRole('trainer', serverScenario.metadata)
+    this.currentMetadata = serverScenario.metadata
+    this.broadcast(serverScenario.metadata)
     engine.start(serverScenario.scenario)
+    this.forceBroadcastState()
   }
 
   private sendToRole(role: SessionRole, message: ServerMessage): void {
@@ -312,9 +457,10 @@ export class SimulationSession {
         id: entry.id,
         name: entry.name,
         role: entry.role,
+        connected: entry.connected,
       })),
       phase: this.phase,
-      scenarioId: this.scenarioId,
+      scenarioId: this.currentScenarioId,
     })
   }
 }

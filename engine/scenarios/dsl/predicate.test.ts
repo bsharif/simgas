@@ -53,6 +53,12 @@ describe('predicate tokenizer + parser', () => {
     expect(evaluatePredicate("count('missing') == 0", ctx)).toBe(true)
   })
 
+  it('count() matches glob patterns like any()', () => {
+    const ctx = makeCtx({ interventions: ['adrenaline-1', 'adrenaline-10', 'fluid-bolus'] })
+    expect(evaluatePredicate("count('adrenaline-*') == 2", ctx)).toBe(true)
+    expect(evaluatePredicate("count('adrenaline-*') >= 3", ctx)).toBe(false)
+  })
+
   it('phase_done() reads completedPhases', () => {
     const ctx = makeCtx({ completedPhases: new Set(['onset']) })
     expect(evaluatePredicate("phase_done('onset')", ctx)).toBe(true)

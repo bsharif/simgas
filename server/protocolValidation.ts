@@ -53,6 +53,8 @@ const clientMessageSchemas = [
   z.object({ type: z.literal('advance_phase'), phaseId: idSchema }).strict(),
   z.object({ type: z.literal('clear_forced_phase') }).strict(),
   z.object({ type: z.literal('inject_event'), text: z.string().max(300) }).strict(),
+  z.object({ type: z.literal('add_note'), text: z.string().max(500), teaching: z.boolean().optional() }).strict(),
+  z.object({ type: z.literal('open_debrief') }).strict(),
   z.object({ type: z.literal('pause') }).strict(),
   z.object({ type: z.literal('resume') }).strict(),
   z.object({ type: z.literal('end_session') }).strict(),

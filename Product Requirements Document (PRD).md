@@ -487,25 +487,19 @@ Education Features
 
 ⸻
 
-13. Monetisation
+13. Open-source positioning (supersedes earlier monetisation plans)
 
-Options
+SimGas is an educator-owned, offline-capable, open-source simulator.
+There is no monetisation plan: no freemium tiers, no institutional
+licensing, no paid marketplace.
 
-Freemium
+Sustainability instead comes from:
 
-* Limited free scenarios
-* Premium subscriptions
-
-Institutional Licensing
-
-* NHS trusts
-* Universities
-* Simulation centres
-
-Marketplace
-
-* Paid scenario packs
-* Community-created scenarios
+* MIT-licensed code and scenario content (see LICENSE)
+* Community scenario packs contributed via pull request
+* A clinical review checklist for contributed scenarios (CONTRIBUTING.md)
+* Local-network deployment that requires no accounts or cloud services
+  (docs/local-network-setup.md)
 
 ⸻
 

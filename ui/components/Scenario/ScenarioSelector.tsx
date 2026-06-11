@@ -43,36 +43,54 @@ const ScenarioSelector: FC = () => {
               borderRadius: 4,
               zIndex: 100,
               minWidth: 220,
-              overflow: 'hidden',
+              maxHeight: '70vh',
+              overflowY: 'auto',
               boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
             }}>
-              {scenarios.map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => {
-                    startScenario(s.id)
-                    setIsOpen(false)
-                  }}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '11px 14px',
-                    border: 'none',
-                    background: scenario?.id === s.id ? '#f0f0e8' : 'transparent',
-                    color: scenario?.id === s.id ? '#2c2c2c' : '#888',
-                    fontSize: 14,
-                    textAlign: 'left',
-                    cursor: 'pointer',
+              {/* Group cases by scenario pack so educators can teach curricula,
+                  not isolated cases. Unpacked scenarios fall under "Other". */}
+              {[...new Set(scenarios.map(s => s.pack ?? 'Other'))].map(pack => (
+                <div key={pack}>
+                  <div style={{
+                    padding: '8px 14px 4px',
+                    fontSize: 11,
+                    textTransform: 'uppercase',
+                    letterSpacing: 1,
+                    color: '#aaa',
+                    background: '#fafaf7',
                     borderBottom: '1px solid #f0f0ea',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f0' }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = scenario?.id === s.id ? '#f0f0e8' : 'transparent'
-                  }}
-                >
-                  <div>{s.label}</div>
-                  <div style={{ fontSize: 12, color: '#ccc', marginTop: 3 }}>{s.description.slice(0, 60)}...</div>
-                </button>
+                  }}>
+                    {pack}
+                  </div>
+                  {scenarios.filter(s => (s.pack ?? 'Other') === pack).map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        startScenario(s.id)
+                        setIsOpen(false)
+                      }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        padding: '11px 14px',
+                        border: 'none',
+                        background: scenario?.id === s.id ? '#f0f0e8' : 'transparent',
+                        color: scenario?.id === s.id ? '#2c2c2c' : '#888',
+                        fontSize: 14,
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #f0f0ea',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f0' }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = scenario?.id === s.id ? '#f0f0e8' : 'transparent'
+                      }}
+                    >
+                      <div>{s.label}</div>
+                      <div style={{ fontSize: 12, color: '#ccc', marginTop: 3 }}>{s.description.slice(0, 60)}...</div>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           </>

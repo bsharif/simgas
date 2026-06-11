@@ -81,11 +81,42 @@ describe('SimulationSession', () => {
     expect(reconnect.messages.map(message => message.type)).toEqual([
       'event_log_snapshot',
       'state',
-      'session_info',
       'phase_change',
+      'session_info',
     ])
-    expect(reconnect.messages[0]).toEqual({ type: 'event_log_snapshot', events: ['▶ Starting scenario: Anaphylaxis', 'Started'] })
+    expect(reconnect.messages[0]).toEqual({ type: 'event_log_snapshot', events: ['Started'] })
     expect(reconnect.messages[1]).toEqual({ type: 'state', snapshot: snapshot('failed') })
+  })
+
+  it('opens as a waiting room: no scenario engine runs until the trainer starts the case', () => {
+    vi.useFakeTimers()
+    try {
+      const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+      const trainer = collect()
+      session.connectTrainer(trainer.send)
+      vi.advanceTimersByTime(500)
+
+      expect(trainer.messages.some(message => message.type === 'state')).toBe(false)
+      const info = trainer.messages.find(message => message.type === 'session_info')
+      expect(info).toMatchObject({ phase: 'idle', scenarioId: 'anaphylaxis' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('marks roster entries with their connection state', () => {
+    const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+    const trainer = collect()
+    session.connectTrainer(trainer.send)
+    const trainee = collect()
+    const joined = session.joinTrainee('John', trainee.send)
+    if (!joined.ok) throw new Error('join failed')
+
+    session.disconnect(joined.clientId)
+
+    const lastInfo = trainer.messages.filter(message => message.type === 'session_info').at(-1)
+    if (!lastInfo || lastInfo.type !== 'session_info') throw new Error('missing session_info')
+    expect(lastInfo.roster).toContainEqual(expect.objectContaining({ name: 'John', role: 'trainee', connected: false }))
   })
 
   it('sends the event log and latest state snapshot when a trainee joins an active session', () => {
@@ -109,7 +140,7 @@ describe('SimulationSession', () => {
 
     session.handleClientMessage(joined.clientId, { type: 'pause' })
 
-    expect(trainee.messages.at(-1)).toEqual({ type: 'error', code: 'unauthorized' })
+    expect(trainee.messages.at(-1)).toEqual({ type: 'error', code: 'unauthorized', message: 'Only the trainer can do that.' })
   })
 
   it('limits sessions to 30 trainees', () => {
@@ -161,6 +192,7 @@ describe('SimulationSession', () => {
       const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
       const trainer = collect()
       const connection = session.connectTrainer(trainer.send)
+      session.handleClientMessage(connection.clientId, { type: 'start_scenario', scenarioId: 'anaphylaxis' })
 
       session.handleClientMessage(connection.clientId, { type: 'pause' })
       expect(trainer.messages).toContainEqual({
@@ -189,6 +221,126 @@ describe('SimulationSession', () => {
       vi.advanceTimersByTime(120)
 
       expect(trainer.messages.some(message => message.type === 'state')).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('broadcasts scenario metadata (with debrief body) to trainees as well as the trainer', () => {
+    vi.useFakeTimers()
+    try {
+      const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+      const trainer = collect()
+      const connection = session.connectTrainer(trainer.send)
+      const trainee = collect()
+      session.joinTrainee('John', trainee.send)
+
+      session.handleClientMessage(connection.clientId, { type: 'start_scenario', scenarioId: 'anaphylaxis' })
+
+      const metadata = trainee.messages.find(message => message.type === 'scenario_metadata')
+      if (!metadata || metadata.type !== 'scenario_metadata') throw new Error('missing metadata')
+      expect(metadata.scenarioId).toBe('anaphylaxis')
+      expect(metadata.debriefBody).toContain('Anaphylaxis')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('delivers terminal state immediately even when a routine broadcast just landed', () => {
+    vi.useFakeTimers()
+    try {
+      const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+      const trainer = collect()
+      const connection = session.connectTrainer(trainer.send)
+      session.handleClientMessage(connection.clientId, { type: 'start_scenario', scenarioId: 'anaphylaxis' })
+      // Apply the full management bundle so the recovery phase can resolve.
+      session.handleClientMessage(connection.clientId, { type: 'intervene', interventionId: 'stop-trigger' })
+      session.handleClientMessage(connection.clientId, { type: 'intervene', interventionId: 'adrenaline-10' })
+      session.handleClientMessage(connection.clientId, { type: 'intervene', interventionId: 'increase-fio2' })
+      session.handleClientMessage(connection.clientId, { type: 'intervene', interventionId: 'fluid-bolus' })
+
+      // Run until the scenario resolves (resolve_when: phase_elapsed > 90).
+      vi.advanceTimersByTime(95_000)
+
+      const phaseChangeIndex = trainer.messages.findIndex(
+        message => message.type === 'phase_change' && message.phase === 'resolved',
+      )
+      expect(phaseChangeIndex).toBeGreaterThan(-1)
+      // A state snapshot carrying the terminal phase must arrive despite the
+      // 10 Hz throttle, no later than the phase_change event.
+      const terminalState = trainer.messages.findIndex(
+        message => message.type === 'state' && message.snapshot.phase === 'resolved',
+      )
+      expect(terminalState).toBeGreaterThan(-1)
+      expect(terminalState).toBeLessThan(phaseChangeIndex)
+      // And the debrief summary follows.
+      const summary = trainer.messages.find(message => message.type === 'session_summary')
+      if (!summary || summary.type !== 'session_summary') throw new Error('missing session_summary')
+      expect(summary.outcome).toBe('resolved')
+      expect(summary.vitalsHistory.length).toBeGreaterThan(0)
+      expect(summary.interventionEvents.map(event => event.id)).toContain('adrenaline-10')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('synchronizes the dose ledger to all clients', () => {
+    vi.useFakeTimers()
+    try {
+      const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+      const trainer = collect()
+      const connection = session.connectTrainer(trainer.send)
+      const trainee = collect()
+      const joined = session.joinTrainee('John', trainee.send)
+      if (!joined.ok) throw new Error('join failed')
+      session.handleClientMessage(connection.clientId, { type: 'start_scenario', scenarioId: 'anaphylaxis' })
+
+      session.handleClientMessage(joined.clientId, { type: 'intervene', interventionId: 'adrenaline-10' })
+
+      const ledger = trainee.messages.filter(message => message.type === 'dose_ledger').at(-1)
+      if (!ledger || ledger.type !== 'dose_ledger') throw new Error('missing dose_ledger')
+      expect(ledger.entries).toContainEqual(expect.objectContaining({ id: 'adrenaline-10', count: 1 }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('attributes accepted interventions to the actor on the trainer action log', () => {
+    vi.useFakeTimers()
+    try {
+      const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+      const trainer = collect()
+      const connection = session.connectTrainer(trainer.send)
+      const trainee = collect()
+      const joined = session.joinTrainee('John', trainee.send)
+      if (!joined.ok) throw new Error('join failed')
+      session.handleClientMessage(connection.clientId, { type: 'start_scenario', scenarioId: 'anaphylaxis' })
+
+      session.handleClientMessage(joined.clientId, { type: 'intervene', interventionId: 'adrenaline-10' })
+
+      const action = trainer.messages.find(message => message.type === 'action')
+      if (!action || action.type !== 'action') throw new Error('missing action')
+      expect(action.entry).toMatchObject({ actorName: 'John', actorRole: 'trainee', kind: 'intervention' })
+      // Trainees don't receive the attributed action stream.
+      expect(trainee.messages.some(message => message.type === 'action')).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('restarting a scenario clears the previous run event log and summary', () => {
+    vi.useFakeTimers()
+    try {
+      const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+      const trainer = collect()
+      const connection = session.connectTrainer(trainer.send)
+      session.handleClientMessage(connection.clientId, { type: 'start_scenario', scenarioId: 'anaphylaxis' })
+      vi.advanceTimersByTime(1000)
+
+      session.handleClientMessage(connection.clientId, { type: 'start_scenario', scenarioId: 'anaphylaxis' })
+
+      const snapshots = trainer.messages.filter(message => message.type === 'event_log_snapshot')
+      expect(snapshots.at(-1)).toEqual({ type: 'event_log_snapshot', events: [] })
     } finally {
       vi.useRealTimers()
     }
