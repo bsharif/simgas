@@ -525,3 +525,160 @@ describe('bronchospasm machine-state predicates', () => {
     expect(scenario.getRuntimeInfo?.().currentPhaseId).toBe('recovery')
   })
 })
+
+describe('air-embolism scenario', () => {
+  it('fails in asystole when the gas source is never stopped', () => {
+    const scenario = SCENARIO_MAP.get('air-embolism')!
+    scenario.reset?.()
+    const state = createBaselineState()
+    applyModifier(state, scenario.initialModifiers)
+    let lastResult = applyScenarioStep(scenario, state, 0, [], 0)
+    for (let t = 1; t <= 200; t++) {
+      lastResult = applyScenarioStep(scenario, state, t, [], 1)
+      if (lastResult.failed) break
+    }
+    expect(lastResult.failed).toBe(true)
+    expect(state.ecgRhythm).toBe('asystole')
+  })
+
+  it('resolves once the source is controlled with 100% oxygen and fluids', () => {
+    const scenario = SCENARIO_MAP.get('air-embolism')!
+    scenario.reset?.()
+    const state = createBaselineState()
+    applyModifier(state, scenario.initialModifiers)
+    let lastResult = applyScenarioStep(scenario, state, 0, [], 0)
+    let interventions: string[] = []
+    for (let t = 1; t <= 200; t++) {
+      if (t === 5) {
+        interventions = ['stop-trigger', 'call-help', 'increase-fio2', 'fluid-bolus']
+        // Simulate the engine applying 100% oxygen.
+        state.fio2 = 1.0
+      }
+      lastResult = applyScenarioStep(scenario, state, t, interventions, 1)
+      if (lastResult.resolved || lastResult.failed) break
+    }
+    expect(lastResult.resolved).toBe(true)
+    expect(state.etco2).toBe(4.8)
+  })
+
+  it('does NOT resolve on source control alone — oxygen and fluids are required', () => {
+    const scenario = SCENARIO_MAP.get('air-embolism')!
+    scenario.reset?.()
+    const state = createBaselineState()
+    applyModifier(state, scenario.initialModifiers)
+    let lastResult = applyScenarioStep(scenario, state, 0, [], 0)
+    let interventions: string[] = []
+    for (let t = 1; t <= 250; t++) {
+      if (t === 5) interventions = ['stop-trigger']
+      lastResult = applyScenarioStep(scenario, state, t, interventions, 1)
+      if (lastResult.resolved || lastResult.failed) break
+    }
+    expect(lastResult.resolved).toBe(false)
+    expect(lastResult.failed).toBe(false)
+  })
+})
+
+describe('haemorrhagic-shock scenario', () => {
+  it('fails in asystole when no volume or vasopressor is given', () => {
+    const scenario = SCENARIO_MAP.get('haemorrhagic-shock')!
+    scenario.reset?.()
+    const state = createBaselineState()
+    applyModifier(state, scenario.initialModifiers)
+    let lastResult = applyScenarioStep(scenario, state, 0, [], 0)
+    for (let t = 1; t <= 250; t++) {
+      lastResult = applyScenarioStep(scenario, state, t, [], 1)
+      if (lastResult.failed) break
+    }
+    expect(lastResult.failed).toBe(true)
+    expect(state.ecgRhythm).toBe('asystole')
+  })
+
+  it('resolves when volume AND blood are running on high-flow oxygen', () => {
+    const scenario = SCENARIO_MAP.get('haemorrhagic-shock')!
+    scenario.reset?.()
+    const state = createBaselineState()
+    applyModifier(state, scenario.initialModifiers)
+    let lastResult = applyScenarioStep(scenario, state, 0, [], 0)
+    let interventions: string[] = []
+    for (let t = 1; t <= 250; t++) {
+      if (t === 5) {
+        interventions = ['call-help', 'fluid-bolus', 'blood-transfusion', 'increase-fio2', 'txa']
+        state.fio2 = 1.0
+      }
+      lastResult = applyScenarioStep(scenario, state, t, interventions, 1)
+      if (lastResult.resolved || lastResult.failed) break
+    }
+    expect(lastResult.resolved).toBe(true)
+  })
+
+  it('does NOT resolve on crystalloid alone — blood is required', () => {
+    const scenario = SCENARIO_MAP.get('haemorrhagic-shock')!
+    scenario.reset?.()
+    const state = createBaselineState()
+    applyModifier(state, scenario.initialModifiers)
+    let lastResult = applyScenarioStep(scenario, state, 0, [], 0)
+    let interventions: string[] = []
+    for (let t = 1; t <= 300; t++) {
+      if (t === 5) {
+        interventions = ['call-help', 'fluid-bolus', 'increase-fio2']
+        state.fio2 = 1.0
+      }
+      lastResult = applyScenarioStep(scenario, state, t, interventions, 1)
+      if (lastResult.resolved || lastResult.failed) break
+    }
+    expect(lastResult.resolved).toBe(false)
+    expect(lastResult.failed).toBe(false)
+  })
+})
+
+describe('high-spinal scenario', () => {
+  it('resolves when circulation is supported AND the airway is secured', () => {
+    const scenario = SCENARIO_MAP.get('high-spinal')!
+    scenario.reset?.()
+    const state = createBaselineState()
+    applyModifier(state, scenario.initialModifiers)
+    let lastResult = applyScenarioStep(scenario, state, 0, [], 0)
+    let interventions: string[] = []
+    for (let t = 1; t <= 250; t++) {
+      if (t === 5) interventions = ['call-help', 'metaraminol', 'fluid-bolus', 'intubate']
+      lastResult = applyScenarioStep(scenario, state, t, interventions, 1)
+      if (lastResult.resolved || lastResult.failed) break
+    }
+    expect(lastResult.resolved).toBe(true)
+  })
+
+  it('does NOT resolve on vasopressor alone — the apnoeic patient must be ventilated', () => {
+    const scenario = SCENARIO_MAP.get('high-spinal')!
+    scenario.reset?.()
+    const state = createBaselineState()
+    applyModifier(state, scenario.initialModifiers)
+    let lastResult = applyScenarioStep(scenario, state, 0, [], 0)
+    let interventions: string[] = []
+    for (let t = 1; t <= 300; t++) {
+      if (t === 5) interventions = ['call-help', 'metaraminol', 'fluid-bolus']
+      lastResult = applyScenarioStep(scenario, state, t, interventions, 1)
+      if (lastResult.resolved || lastResult.failed) break
+    }
+    expect(lastResult.resolved).toBe(false)
+    expect(lastResult.failed).toBe(false)
+  })
+})
+
+describe('no-treatment safety sweep (every scenario)', () => {
+  // Invariant: a scenario must never auto-resolve with zero interventions.
+  // It may fail or stay running, but a "correct" outcome must require action.
+  for (const scenario of ALL_SCENARIOS) {
+    it(`${scenario.id} does not resolve without any intervention`, () => {
+      scenario.reset?.()
+      const state = createBaselineState()
+      applyModifier(state, scenario.initialModifiers)
+      let result = applyScenarioStep(scenario, state, 0, [], 0)
+      expect(result.resolved).toBe(false)
+      for (let t = 1; t <= 240; t++) {
+        result = applyScenarioStep(scenario, state, t, [], 1)
+        expect(result.resolved).toBe(false)
+        if (result.failed) break
+      }
+    })
+  }
+})

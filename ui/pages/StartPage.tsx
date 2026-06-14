@@ -20,12 +20,9 @@ const scenarioMeta: Record<string, { icon: string; color: string }> = {
   'high-spinal': { icon: '🦴', color: '#1a5276' },
 }
 
-const FEATURED_IDS = ['anaphylaxis', 'oesophageal-intubation', 'malignant-hyperthermia']
-
 const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
   const { scenarios, mode, setMode, startScenario } = useSimulation()
   const [selectedId, setSelectedId] = useState<string>('anaphylaxis')
-  const [showMore, setShowMore] = useState(false)
 
   const handleStart = () => {
     if (selectedId) {
@@ -77,16 +74,13 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
 
       <div style={{
         display: 'flex',
-        gap: 16,
+        flexDirection: 'column',
+        gap: 24,
         marginBottom: 32,
-        flexWrap: 'wrap',
-        justifyContent: 'center',
+        width: '100%',
         maxWidth: 780,
       }}>
         {(() => {
-          const featured = scenarios.filter(s => FEATURED_IDS.includes(s.id))
-          const more = scenarios.filter(s => !FEATURED_IDS.includes(s.id))
-
           const renderCard = (s: typeof scenarios[number]) => {
             const isSelected = selectedId === s.id
             const meta = scenarioMeta[s.id] || { icon: '📋', color: '#888' }
@@ -139,13 +133,40 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
             )
           }
 
+          // Group cases by scenario pack so educators can pick a curriculum,
+          // not just isolated cases. Unpacked scenarios fall under "Other".
+          const packs = [...new Set(scenarios.map(s => s.pack ?? 'Other'))]
+
           return (
             <>
-              {featured.map(renderCard)}
+              {packs.map(pack => (
+                <div key={pack}>
+                  <div style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: 2,
+                    color: '#999',
+                    marginBottom: 12,
+                    textAlign: 'center',
+                  }}>
+                    {pack}
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    gap: 16,
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                  }}>
+                    {scenarios.filter(s => (s.pack ?? 'Other') === pack).map(renderCard)}
+                  </div>
+                </div>
+              ))}
 
-              {!showMore && (
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
                 <button
-                  onClick={() => setShowMore(true)}
+                  key="__create"
+                  onClick={onOpenCreator}
                   style={{
                     width: 230,
                     padding: 20,
@@ -169,60 +190,18 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
                     e.currentTarget.style.borderColor = '#ccc'
                   }}
                 >
-                  <div style={{ fontSize: 24, lineHeight: 1, color: '#aaa' }}>＋</div>
+                  <div style={{ fontSize: 28, lineHeight: 1 }}>✏️</div>
                   <div style={{
-                    color: '#888',
+                    color: '#999',
                     fontSize: 14,
                     fontWeight: 600,
-                    letterSpacing: 0.5,
+                    letterSpacing: 1,
+                    textTransform: 'uppercase',
                   }}>
-                    More Scenarios
-                  </div>
-                  <div style={{ color: '#bbb', fontSize: 12 }}>
-                    {more.length} additional cases
+                    + Create Scenario
                   </div>
                 </button>
-              )}
-
-              {showMore && more.map(renderCard)}
-
-              <button
-                key="__create"
-                onClick={onOpenCreator}
-                style={{
-                  width: 230,
-                  padding: 20,
-                  borderRadius: 10,
-                  border: '1px dashed #ccc',
-                  background: '#fafafa',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  transition: 'border-color 0.2s, background 0.2s',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = '#ffffff'
-                  e.currentTarget.style.borderColor = '#1a5276'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = '#fafafa'
-                  e.currentTarget.style.borderColor = '#ccc'
-                }}
-              >
-                <div style={{ fontSize: 28, lineHeight: 1 }}>✏️</div>
-                <div style={{
-                  color: '#999',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
-                }}>
-                  + Create Scenario
-                </div>
-              </button>
+              </div>
             </>
           )
         })()}

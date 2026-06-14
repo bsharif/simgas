@@ -214,6 +214,12 @@ body {
 .remote-session__monitor,
 .trainer-monitor {
   flex: 1;
+  /* Must be a flex column so the monitor's `.intellivue-frame { flex: 1 }`
+     is bounded by the available height (as it is in solo). Without this the
+     frame grows to its natural content height and overflows the viewport,
+     blowing the waveforms up and cropping the NIBP/soft-key rows. */
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   padding: 10px;

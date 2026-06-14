@@ -143,6 +143,54 @@ describe('SimulationSession', () => {
     expect(trainee.messages.at(-1)).toEqual({ type: 'error', code: 'unauthorized', message: 'Only the trainer can do that.' })
   })
 
+  it('allows duplicate trainee names as distinct participants', () => {
+    const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+    const trainer = collect()
+    session.connectTrainer(trainer.send)
+
+    const first = session.joinTrainee('John', () => undefined)
+    const second = session.joinTrainee('John', () => undefined)
+
+    expect(first.ok && second.ok).toBe(true)
+    if (!first.ok || !second.ok) throw new Error('join failed')
+    expect(first.clientId).not.toBe(second.clientId)
+    expect(first.token).not.toBe(second.token)
+
+    const lastInfo = trainer.messages.filter(message => message.type === 'session_info').at(-1)
+    if (!lastInfo || lastInfo.type !== 'session_info') throw new Error('missing session_info')
+    const johns = lastInfo.roster.filter(entry => entry.name === 'John' && entry.role === 'trainee')
+    expect(johns).toHaveLength(2)
+  })
+
+  it('rejects reconnect with an unknown token', () => {
+    const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+
+    expect(session.reconnect('tok_does_not_exist', () => undefined)).toEqual({ ok: false, code: 'unauthorized' })
+  })
+
+  it('attributes simultaneous interventions from two trainees on the action log', () => {
+    vi.useFakeTimers()
+    try {
+      const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
+      const trainer = collect()
+      const connection = session.connectTrainer(trainer.send)
+      const a = session.joinTrainee('Ada', () => undefined)
+      const b = session.joinTrainee('Bo', () => undefined)
+      if (!a.ok || !b.ok) throw new Error('join failed')
+      session.handleClientMessage(connection.clientId, { type: 'start_scenario', scenarioId: 'anaphylaxis' })
+
+      session.handleClientMessage(a.clientId, { type: 'intervene', interventionId: 'adrenaline-10' })
+      session.handleClientMessage(b.clientId, { type: 'intervene', interventionId: 'fluid-bolus' })
+
+      const actions = trainer.messages.filter(message => message.type === 'action')
+      const actors = actions.map(message => (message.type === 'action' ? message.entry.actorName : ''))
+      expect(actors).toContain('Ada')
+      expect(actors).toContain('Bo')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('limits sessions to 30 trainees', () => {
     const session = new SimulationSession({ code: '7K3M9P', trainerName: 'Trainer', scenarioId: 'anaphylaxis' })
 

@@ -84,6 +84,70 @@ describe('createApp', () => {
     })
   })
 
+  it('rejects joining an unknown session code', async () => {
+    const server = createHttpServer()
+    server.listen(0)
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('missing port')
+
+    const ws = await openWs(`ws://127.0.0.1:${address.port}/ws`)
+    ws.send(JSON.stringify({ type: 'join_session', sessionCode: 'ZZZZZZ', name: 'John' }))
+    const reply = await nextMessage(ws)
+
+    ws.close()
+    server.close()
+
+    expect(reply).toEqual({ type: 'error', code: 'not_found' })
+  })
+
+  it('rejects gameplay commands from a socket with no session', async () => {
+    const server = createHttpServer()
+    server.listen(0)
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('missing port')
+
+    const ws = await openWs(`ws://127.0.0.1:${address.port}/ws`)
+    ws.send(JSON.stringify({ type: 'pause' }))
+    const reply = await nextMessage(ws)
+
+    ws.close()
+    server.close()
+
+    expect(reply).toEqual({ type: 'error', code: 'unauthorized' })
+  })
+
+  it('returns a parse error for malformed JSON', async () => {
+    const server = createHttpServer()
+    server.listen(0)
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('missing port')
+
+    const ws = await openWs(`ws://127.0.0.1:${address.port}/ws`)
+    ws.send('not json at all')
+    const reply = await nextMessage(ws)
+
+    ws.close()
+    server.close()
+
+    expect(reply).toEqual({ type: 'error', code: 'bad_json' })
+  })
+
+  it('reconnecting against an unknown session code is rejected', async () => {
+    const server = createHttpServer()
+    server.listen(0)
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('missing port')
+
+    const ws = await openWs(`ws://127.0.0.1:${address.port}/ws`)
+    ws.send(JSON.stringify({ type: 'reconnect', sessionCode: 'ZZZZZZ', token: 'tok_nope' }))
+    const reply = await nextMessage(ws)
+
+    ws.close()
+    server.close()
+
+    expect(reply).toEqual({ type: 'error', code: 'not_found' })
+  })
+
   it('heartbeat terminates clients stale for more than 45 seconds', () => {
     let now = 0
     const socket = { ping: vi.fn(), terminate: vi.fn() }

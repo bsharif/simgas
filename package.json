@@ -12,6 +12,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:scenarios": "vitest run engine/scenarios",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "coverage": "vitest run --coverage",
     "typecheck": "tsc -b",
     "lint:scenarios": "tsx scripts/lint-scenarios.ts",
     "prepare": "simple-git-hooks",
@@ -31,7 +35,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.60.0",
     "@types/express": "^5.0.0",
     "@types/node": "^24.12.3",
     "@types/qrcode": "^1.5.6",
@@ -39,6 +45,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.6",
     "concurrently": "^9.1.2",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",

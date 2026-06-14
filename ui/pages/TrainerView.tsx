@@ -141,7 +141,7 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
         <div className="trainer-layout trainer-layout--waiting" style={{ display: 'flex', gap: 16, padding: 16, flex: 1, minHeight: 0 }}>
           <section className="trainer-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <h2>Waiting room</h2>
-            <p>Invite trainees with the code <strong>{sessionCode ?? '...'}</strong> or the QR below, brief the case, then start when everyone is in.</p>
+            <p>Invite trainees with the code <strong data-testid="session-code">{sessionCode ?? '...'}</strong> or the QR below, brief the case, then start when everyone is in.</p>
             <div ref={qrContainerRef} style={{ flex: 1, minHeight: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <canvas ref={qrCanvasRef} className="qr-canvas" style={{ display: qrReady ? 'block' : 'none' }} />
               {!qrReady && <span>Generating QR...</span>}
@@ -149,8 +149,12 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
             <label style={{ display: 'block', margin: '12px 0 8px' }}>
               Scenario{' '}
               <select value={selectedScenarioId} onChange={event => setSelectedScenarioId(event.currentTarget.value)}>
-                {ALL_SCENARIOS.map(scenario => (
-                  <option key={scenario.id} value={scenario.id}>{scenario.label}</option>
+                {[...new Set(ALL_SCENARIOS.map(scenario => scenario.pack ?? 'Other'))].map(pack => (
+                  <optgroup key={pack} label={pack}>
+                    {ALL_SCENARIOS.filter(scenario => (scenario.pack ?? 'Other') === pack).map(scenario => (
+                      <option key={scenario.id} value={scenario.id}>{scenario.label}</option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </label>
@@ -207,8 +211,12 @@ const TrainerView: FC<{ onEnd: () => void }> = ({ onEnd }) => {
                   <label>
                     Next case{' '}
                     <select value={selectedScenarioId} onChange={event => setSelectedScenarioId(event.currentTarget.value)}>
-                      {ALL_SCENARIOS.map(scenario => (
-                        <option key={scenario.id} value={scenario.id}>{scenario.label}</option>
+                      {[...new Set(ALL_SCENARIOS.map(scenario => scenario.pack ?? 'Other'))].map(pack => (
+                        <optgroup key={pack} label={pack}>
+                          {ALL_SCENARIOS.filter(scenario => (scenario.pack ?? 'Other') === pack).map(scenario => (
+                            <option key={scenario.id} value={scenario.id}>{scenario.label}</option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </label>
