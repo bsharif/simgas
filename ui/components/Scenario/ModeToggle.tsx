@@ -28,7 +28,7 @@ const ModeToggle: FC = () => {
             padding: '7px 14px',
             border: 'none',
             background: mode === m.id ? '#ffffff' : 'transparent',
-            color: mode === m.id ? '#1a5276' : '#bbb',
+            color: mode === m.id ? '#1a5276' : '#666',
             fontSize: 14,
             cursor: 'pointer',
             borderRight: '1px solid #e0ddd5',
@@ -38,7 +38,7 @@ const ModeToggle: FC = () => {
             if (mode !== m.id) e.currentTarget.style.color = '#888'
           }}
           onMouseLeave={e => {
-            if (mode !== m.id) e.currentTarget.style.color = '#bbb'
+            if (mode !== m.id) e.currentTarget.style.color = '#666'
           }}
         >
           {m.label}

@@ -91,6 +91,22 @@ describe('SimulationEngine runtime injection', () => {
 
     expect(engine.elapsedSeconds).toBeCloseTo(0.1, 3)
   })
+
+  it('timeScale multiplies elapsed time (clamp applies before scaling)', () => {
+    const fake = createRuntime()
+    const engine = new SimulationEngine({ runtime: fake.runtime, timeScale: 10 })
+
+    engine.start(createScenario())
+    const [handle] = fake.scheduledHandles()
+
+    // 16 ms real frame → 0.16 s of sim time at 10×.
+    fake.runFrame(handle, 16)
+    expect(engine.elapsedSeconds).toBeCloseTo(0.16, 3)
+
+    // A long delay clamps to 100 ms real first, then scales: +1.0 s.
+    fake.runFrame(handle, 10_000)
+    expect(engine.elapsedSeconds).toBeCloseTo(1.16, 3)
+  })
 })
 
 describe('SimulationEngine modifier hook', () => {

@@ -49,6 +49,12 @@ interface EngineRuntime {
 interface SimulationEngineOptions {
   runtime?: EngineRuntime
   modifierHook?: ModifierHook
+  /**
+   * Multiplier applied to each tick's elapsed time. Defaults to 1 (real time).
+   * Used to fast-forward a scenario (e.g. demos, and E2E tests that need to
+   * reach a terminal/debrief state without waiting ~90s of wall-clock).
+   */
+  timeScale?: number
 }
 
 type ModifierHook = (state: PatientState, elapsedSec: number) => PatientModifier | null
@@ -84,11 +90,13 @@ export class SimulationEngine {
   private lastManualBreathMs = -Infinity
   private runtime: EngineRuntime
   private modifierHook: ModifierHook | null
+  private timeScale: number
   private static readonly MANUAL_BREATH_DEBOUNCE_MS = 600
 
   constructor(options: SimulationEngineOptions = {}) {
     this.runtime = options.runtime ?? browserRuntime
     this.modifierHook = options.modifierHook ?? null
+    this.timeScale = options.timeScale && options.timeScale > 0 ? options.timeScale : 1
     this.state = createBaselineState()
   }
 
@@ -336,7 +344,9 @@ export class SimulationEngine {
       return
     }
 
-    const deltaMs = Math.min(timestamp - this.lastTimestamp, 100)
+    // Cap the real frame delta (guards against huge jumps when the tab is
+    // backgrounded) before applying the fast-forward multiplier.
+    const deltaMs = Math.min(timestamp - this.lastTimestamp, 100) * this.timeScale
     this.lastTimestamp = timestamp
     this.elapsedMs += deltaMs
 

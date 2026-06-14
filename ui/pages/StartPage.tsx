@@ -64,7 +64,7 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
         </div>
         <div style={{
           fontSize: 14,
-          color: '#999',
+          color: '#666',
           letterSpacing: 3,
           textTransform: 'uppercase',
         }}>
@@ -117,13 +117,13 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
                 }}>
                   {s.label}
                 </div>
-                <div style={{ color: '#999', fontSize: 13, lineHeight: 1.4 }}>
+                <div style={{ color: '#666', fontSize: 13, lineHeight: 1.4 }}>
                   {s.description.length > 70 ? s.description.slice(0, 70) + '...' : s.description}
                 </div>
                 <div style={{
                   marginTop: 8,
                   fontSize: 12,
-                  color: isSelected ? meta.color : '#bbb',
+                  color: isSelected ? meta.color : '#666',
                   fontWeight: 600,
                   textTransform: 'uppercase',
                 }}>
@@ -146,7 +146,7 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
                     fontWeight: 700,
                     textTransform: 'uppercase',
                     letterSpacing: 2,
-                    color: '#999',
+                    color: '#666',
                     marginBottom: 12,
                     textAlign: 'center',
                   }}>
@@ -192,7 +192,7 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
                 >
                   <div style={{ fontSize: 28, lineHeight: 1 }}>✏️</div>
                   <div style={{
-                    color: '#999',
+                    color: '#666',
                     fontSize: 14,
                     fontWeight: 600,
                     letterSpacing: 1,
@@ -221,7 +221,7 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
               borderRadius: 6,
               border: mode === m ? '1px solid #1a5276' : '1px solid #e0ddd5',
               background: mode === m ? '#ffffff' : 'transparent',
-              color: mode === m ? '#1a5276' : '#999',
+              color: mode === m ? '#1a5276' : '#666',
               fontSize: 15,
               fontWeight: 600,
               cursor: 'pointer',
@@ -259,7 +259,7 @@ const StartPage: FC<StartPageProps> = ({ onStart, onOpenCreator }) => {
       <div style={{
         marginTop: 48,
         fontSize: 11,
-        color: '#ccc',
+        color: '#666',
         maxWidth: 400,
         textAlign: 'center',
         lineHeight: 1.6,

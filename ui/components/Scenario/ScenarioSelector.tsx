@@ -24,7 +24,7 @@ const ScenarioSelector: FC = () => {
           }}
         >
           {scenario?.label || 'Select Scenario'}
-          <span style={{ color: '#bbb', fontSize: 10 }}>▼</span>
+          <span style={{ color: '#666', fontSize: 10 }}>▼</span>
         </button>
 
         {isOpen && (

@@ -38,8 +38,20 @@ interface SimulationContextValue {
 
 const SimulationContext = createContext<SimulationContextValue | null>(null)
 
+/**
+ * Optional fast-forward via `?timescale=N` (clamped 1–60). Used by demos and
+ * E2E tests to reach a terminal/debrief state without waiting real time; in
+ * normal use the param is absent and the sim runs at 1×.
+ */
+function readTimeScale(): number {
+  if (typeof window === 'undefined') return 1
+  const raw = new URLSearchParams(window.location.search).get('timescale')
+  const n = raw ? Number(raw) : 1
+  return Number.isFinite(n) ? Math.min(Math.max(n, 1), 60) : 1
+}
+
 export function SimulationProvider({ children }: { children: ReactNode }) {
-  const [engine] = useState(() => new SimulationEngine())
+  const [engine] = useState(() => new SimulationEngine({ timeScale: readTimeScale() }))
   const [dynamicScenarios, setDynamicScenarios] = useState<Scenario[]>([])
 
   const allScenarios = useMemo(() => {
